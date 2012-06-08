@@ -9,32 +9,31 @@ from numpy import array as arr
 
 
 class PseudoMMAP():
-    def __init__(self, fileref):
+    def __init__(self, fileref, provider):
         self.current = 0
         self._mmap = arr([x for x in fileref.read()])
+        self.provider = provider 
     
     def __getitem__(self, index):
         try:
             index.stop
         except AttributeError:
             self.read(index)
-
-        if index.step:
-            raise NotImplementedError
         return(self._mmap[index.start:index.stop])
     
     def __setitem__(self, key, value):
         try:
-            index.stop
+            key.stop
         except AttributeError:
             self._mmap[key] = value
-        if index.step:
-            raise NotImplementedError
         self._mmap[key.start:key.stop] = [x for x in value]
 
     def read(self, length):
         self.current += length
         return(self._mmap[self.current-length:self.current])
+
+    def tell(self):
+        return self.current
 
     def seek(self,index, rel = True):
         if rel:
@@ -42,6 +41,15 @@ class PseudoMMAP():
             return
         self.current = index
         return
+    
+    def size(self):
+        return(len(self._mmap))
+    
+    def flush(self):
+        self.provider.remap() 
+
+    def __len__(self):
+        return(len(self._mmap))
 
 class PseudoMapDataProvider():
     def __init__(self, filename):
@@ -58,12 +66,13 @@ class PseudoMapDataProvider():
     def close(self):
         if self.fileref != False:
             self.fileref.seek(0,0)
-            self.fileref.write("".join(self._mmap))
+            if type(self._mmap) != bool:
+                self.fileref.write("".join(self._mmap[0:len(self._mmap)]))
             self.fileref.close() 
     def map(self, greedy = True): 
         if self.fileref == False:
             raise LaspyException("File not opened.")
-        self._mmap = PseudoMMAP(self.fileref.fileno())
+        self._mmap = PseudoMMAP(self.fileref, self)
 
     def remap(self,flush = True, greedy = True):
         self.close()
@@ -74,8 +83,6 @@ class PseudoMapDataProvider():
         if self._mmap == False:
             raise LaspyException("File not mapped")
         return(len(self._mmap))
-
-
 
 class DataProvider():
     def __init__(self, filename):
@@ -134,7 +141,7 @@ class FileManager():
         self.vlrs = False
         self.header = header  
         self.mode = mode
-        self.data_provider = DataProvider(filename)
+        self.data_provider = PseudoMapDataProvider(filename)
         
         self.header_changes = set()
         self.header_properties = {}
