@@ -5,7 +5,35 @@ from header import Header, leap_year
 from struct import pack, unpack
 from util import *
 from types import GeneratorType
+from numpy import array as arr
 
+
+class PseudoMMAP():
+    def __init__(self, fileref):
+        self.current = 0
+        self._mmap = arr([x for x in fileref.read()])
+    
+    def __getitem__(self, index):
+        try:
+            index.stop
+        except AttributeError:
+            self.read(index)
+
+        if index.step:
+            raise NotImplementedError
+        return(self._mmap[index.start:index.stop])
+    
+    def __setitem__(self, key, value):
+        try:
+            index.stop
+        except AttributeError:
+            self._mmap[key] = value
+        if index.step:
+            raise NotImplementedError
+        self._mmap[key.start:key.stop] = [x for x in value]
+    def read(self, length):
+        self.current += length
+        return(self._mmap[self.current-length:self.current])
 
 
 class DataProvider():
