@@ -7,6 +7,8 @@ from util import *
 from types import GeneratorType
 from numpy import array as arr
 
+
+
 def nullbyte(x):
     if x == "":
         return("\x00")
