@@ -31,9 +31,50 @@ class PseudoMMAP():
         if index.step:
             raise NotImplementedError
         self._mmap[key.start:key.stop] = [x for x in value]
+
     def read(self, length):
         self.current += length
         return(self._mmap[self.current-length:self.current])
+
+    def seek(self,index, rel = True):
+        if rel:
+            self.current += index
+            return
+        self.current = index
+        return
+
+class PseudoMapDataProvider():
+    def __init__(self, filename):
+        self.filename = filename
+        self.fileref = False
+        self._mmap = False
+
+    def open(self, mode):
+        try:
+            self.fileref = open(self.filename, mode)
+        except(Exception):
+            raise LaspyException("Error opening file")
+    
+    def close(self):
+        if self.fileref != False:
+            self.fileref.seek(0,0)
+            self.fileref.write("".join(self._mmap))
+            self.fileref.close() 
+    def map(self, greedy = True): 
+        if self.fileref == False:
+            raise LaspyException("File not opened.")
+        self._mmap = PseudoMMAP(self.fileref.fileno())
+
+    def remap(self,flush = True, greedy = True):
+        self.close()
+        self.open("r+b")
+        self.map(greedy)
+    
+    def filesize(self):
+        if self._mmap == False:
+            raise LaspyException("File not mapped")
+        return(len(self._mmap))
+
 
 
 class DataProvider():
