@@ -7,6 +7,10 @@ from util import *
 from types import GeneratorType
 from numpy import array as arr
 
+def nullbyte(x):
+    if x == "":
+        return("\x00")
+    return(x)
 
 class PseudoMMAP():
     def __init__(self, fileref, provider):
@@ -19,7 +23,7 @@ class PseudoMMAP():
             index.stop
         except AttributeError:
             self.read(index)
-        return(self._mmap[index.start:index.stop])
+        return("".join([nullbyte(x) for x in self._mmap[index.start:index.stop]]))
     
     def __setitem__(self, key, value):
         try:
@@ -28,15 +32,16 @@ class PseudoMMAP():
             self._mmap[key] = value
         self._mmap[key.start:key.stop] = [x for x in value]
 
-    def read(self, length):
+    def read(self, length): 
+        dat = "".join([nullbyte(x) for x in self._mmap[self.current:self.current + length]])
         self.current += length
-        return(self._mmap[self.current-length:self.current])
+        return(dat)
 
     def tell(self):
         return self.current
 
-    def seek(self,index, rel = True):
-        if rel:
+    def seek(self,index, rel = 1):
+        if rel==1:
             self.current += index
             return
         self.current = index
@@ -52,11 +57,11 @@ class PseudoMMAP():
         return(len(self._mmap))
 
 class PseudoMapDataProvider():
-    def __init__(self, filename):
+    def __init__(self, filename, mode):
         self.filename = filename
         self.fileref = False
         self._mmap = False
-
+        self.mode = mode
     def open(self, mode):
         try:
             self.fileref = open(self.filename, mode)
@@ -64,10 +69,13 @@ class PseudoMapDataProvider():
             raise LaspyException("Error opening file")
     
     def close(self):
+        if "r" in self.mode:
+            self.fileref.close()
+            return
         if self.fileref != False:
             self.fileref.seek(0,0)
             if type(self._mmap) != bool:
-                self.fileref.write("".join(self._mmap[0:len(self._mmap)]))
+                self.fileref.write("".join([nullbyte(x) for x in self._mmap[0:len(self._mmap)]]))
             self.fileref.close() 
     def map(self, greedy = True): 
         if self.fileref == False:
@@ -141,7 +149,7 @@ class FileManager():
         self.vlrs = False
         self.header = header  
         self.mode = mode
-        self.data_provider = PseudoMapDataProvider(filename)
+        self.data_provider = PseudoMapDataProvider(filename, mode)
         
         self.header_changes = set()
         self.header_properties = {}
@@ -268,9 +276,11 @@ class FileManager():
     def grab_file_version(self):
         """Manually grab file version from header"""
         self.seek(24, rel = False)
-        v1 = self._read_words("<B", 1, 1)
-        v2 = self._read_words("<B", 1, 1)
-        self.seek(0, rel = True)
+        v1 = struct.unpack("<B", self.data_provider._mmap[24:25])[0]
+        v2 = struct.unpack("<B", self.data_provider._mmap[25:26])[0] 
+        #v1 = self._read_words("<B", 1, 1)
+        #v2 = self._read_words("<B", 1, 1)
+        #self.seek(0, rel = True)
         return(str(v1) +"." +  str(v2))
 
     def get_header(self, mode):
@@ -581,7 +591,7 @@ class Writer(FileManager):
         if not ignore_header_changes:
             self.header.update_histogram()
             self.header.update_min_max() 
-        self.data_provider._mmap.flush()
+        #self.data_provider._mmap.flush()
         self.data_provider.close()
    
     def __del__(self): 
@@ -627,8 +637,10 @@ class Writer(FileManager):
             old_offset = self.header.data_offset
             self.set_header_property("offset_to_point_data",
                                             self.vlr_stop +  value)
-            #self.header.data_offset = self.vlr_stop + value 
+            #self.header.data_offset = self.vlr_stop + value   
             self.data_provider._mmap.flush() 
+            self.data_provider.close()
+            self.data_provider.open("r+b")
             self.seek(0, rel=False)
             dat_part_1 = self.data_provider._mmap.read(self.vlr_stop)
             self.seek(old_offset, rel = False)
