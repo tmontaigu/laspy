@@ -69,8 +69,9 @@ class PseudoMapDataProvider():
             raise LaspyException("Error opening file")
     
     def close(self):
-        if "r" in self.mode:
+        if self.mode in ("r", "r+b"):
             self.fileref.close()
+            self._mmap = False
             return
         if self.fileref != False:
             self.fileref.seek(0,0)
@@ -638,20 +639,19 @@ class Writer(FileManager):
             self.set_header_property("offset_to_point_data",
                                             self.vlr_stop +  value)
             #self.header.data_offset = self.vlr_stop + value   
-            self.data_provider._mmap.flush() 
-            self.data_provider.close()
-            self.data_provider.open("r+b")
-            self.seek(0, rel=False)
-            dat_part_1 = self.data_provider._mmap.read(self.vlr_stop)
-            self.seek(old_offset, rel = False)
-            dat_part_2 = self.data_provider._mmap.read(len(self.data_provider._mmap) - old_offset) 
+            #self.data_provider._mmap.flush() 
+            #self.data_provider.close()
+            #self.data_provider.open("r+b") 
+            dat_part_1 = self.data_provider._mmap[0:self.vlr_stop] 
+            dat_part_2 = self.data_provider._mmap[len(self.data_provider._mmap) - old_offset:len(self.data_provider._mmap)] 
             self.data_provider.close() 
             self.data_provider.open("w+b") 
             self.data_provider.fileref.write(dat_part_1) 
             self.data_provider.fileref.write("\x00"*value)
             self.data_provider.fileref.write(dat_part_2)
-            self.data_provider.close()
-            self.__init__(self.data_provider.filename, self.mode) 
+            self.data_provider.remap()
+            #self.data_provider.close()
+            #self.__init__(self.data_provider.filename, self.mode) 
             return(len(self.data_provider._mmap))
         elif self.mode == "r+":
             pass
