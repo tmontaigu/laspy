@@ -1,5 +1,5 @@
 import ctypes
-import struct
+from struct import pack, unpack, Struct
 
 class LaspyException(Exception):
     """LaspyException: indicates a laspy related error."""
@@ -28,7 +28,6 @@ class Spec():
         "Format: " + str(self.Format) + "\n" +
         "Number: " + str(self.num) + "\n"+
         "Offset: " + str(self.offs) + "\n")
-        
 
 ### Note: ctypes formats may behave differently across platforms. 
 ### Those specified here follow the bytesize convention given in the
@@ -39,6 +38,7 @@ class Format():
         self.fmt = fmt
         self.specs = []
         self.rec_len = 0
+        self.pt_fmt_long = "<"
         if not (fmt in ("0", "1", "2", "3", "4", "5", "VLR", "h1.0", "h1.1", "h1.2", "h1.3")):
             raise LaspyException("Invalid format: " + str(fmt))
         ## Point Fields
@@ -148,42 +148,42 @@ class Format():
             offs = last.offs + last.num*fmtLen[last.fmt]
         self.rec_len += num*fmtLen[LEfmt[fmt]]
         self.specs.append(Spec(name, offs, fmt, num, pack, overwritable =  overwritable))
-        
+        self.pt_fmt_long += LEfmt[fmt][1]
+        self.packer = Struct(self.pt_fmt_long)
     def __str__(self):
         for spec in self.specs:
             spec.__str__()
 
 class Point():
-    def __init__(self, reader, startIdx):
-        self.reader = reader
-        for dim in reader.point_format.specs:
-            #reader.seek(dim.offs + startIdx, rel = False)
-            self.__dict__[dim.name] = reader._read_words(dim.fmt,
-                    dim.num, dim.length)
+    def __init__(self, reader, bytestr = False, unpacked_list = False, nice = False):
+        self.reader = reader 
+        self.packer = self.reader.point_format.packer
+        if bytestr != False:
+            self.unpacked = self.packer.unpack(bytestr) 
+        elif unpacked_list != False:
+            self.unpacked = unpacked_list
+        else:
+            raise LaspyException("No byte string or attribute list supplied for point.")
+        i = 0
+        if nice:
+            for dim in reader.point_format.specs: 
+                self.__dict__[dim.name] = self.unpacked[i]
+                i += 1
 
-        bstr = reader.binary_str(self.flag_byte)
-        self.return_num = reader.packed_str(bstr[0:3])
-        self.num_returns = reader.packed_str(bstr[3:6])
-        self.scan_dir_flag = reader.packed_str(bstr[6])
-        self.edge_flight_line = reader.packed_str(bstr[7])
+            #bstr = reader.binary_str(self.flag_byte)
+            #self.return_num = reader.packed_str(bstr[0:3])
+            #self.num_returns = reader.packed_str(bstr[3:6])
+            #self.scan_dir_flag = reader.packed_str(bstr[6])
+            #self.edge_flight_line = reader.packed_str(bstr[7])
 
-        bstr = reader.binary_str(self.raw_classification)
-        self.classification = reader.packed_str(bstr[0:5])
-        self.synthetic = reader.packed_str(bstr[5])
-        self.key_point = reader.packed_str(bstr[6])
-        self.withheld = reader.packed_str(bstr[7])       
+            #bstr = reader.binary_str(self.raw_classification)
+            #self.classification = reader.packed_str(bstr[0:5])
+            #self.synthetic = reader.packed_str(bstr[5])
+            #self.key_point = reader.packed_str(bstr[6])
+            #self.withheld = reader.packed_str(bstr[7])       
+    
     def pack(self):
-        outstr = ""
-        for dim in self.reader.point_format.specs:
-            outstr += self.reader._pack_words(dim.fmt, dim.num, 
-                    dim.length, self.__dict__[dim.name])
- 
-
-
-        
-        
-
-
+        return(self.packer.pack(*self.unpacked))
         
 class var_len_rec():
     def __init__(self, reader=False, attr_dict = False):
@@ -210,7 +210,7 @@ class var_len_rec():
     
     def pack(self, name, val):
         spec = self.fmt.lookup[name]
-        return(struct.pack(spec.fmt, val))
+        return(pack(spec.fmt, val))
     
     def to_byte_string(self):
         out = (self.pack("reserved", self.reserved) + 
