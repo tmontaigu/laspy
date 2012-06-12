@@ -8,6 +8,9 @@ class LaspyException(Exception):
 fmtLen = {"<L":4, "<H":2, "<B":1, "<f":4, "<s":1, "<d":8, "<Q":8}
 LEfmt = {ctypes.c_long:"<L", ctypes.c_ushort:"<H", ctypes.c_ubyte:"<B"
         ,ctypes.c_float:"<f", "c_char":"<s", ctypes.c_double:"<d", ctypes.c_ulonglong:"<Q"}
+npFmt = {"<L":"i4", "<H":"u2", "<B":"u1", "<f":"f4", "<s":"s1", "<d":"f8", "<Q":"u8"}
+
+
 
 class Spec():
     def __init__(self,name,offs, fmt, num, pack = False,ltl_endian = True, overwritable = True):
@@ -20,6 +23,7 @@ class Spec():
             self.num = num
             self.pack = pack
             self.overwritable = overwritable
+            self.np_fmt = npFmt[self.fmt]
         else:
             raise(LaspyException("Big endian files are not currently supported."))
     def __str__(self):
