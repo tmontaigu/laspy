@@ -284,8 +284,8 @@ class FileManager():
     def grab_file_version(self):
         """Manually grab file version from header"""
         self.seek(24, rel = False)
-        v1 = struct.unpack("<B", self.data_provider._mmap[24:25])[0]
-        v2 = struct.unpack("<B", self.data_provider._mmap[25:26])[0] 
+        v1 = unpack("<B", self.data_provider._mmap[24:25])[0]
+        v2 = unpack("<B", self.data_provider._mmap[25:26])[0] 
         #v1 = self._read_words("<B", 1, 1)
         #v2 = self._read_words("<B", 1, 1)
         #self.seek(0, rel = True)
