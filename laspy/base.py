@@ -127,8 +127,6 @@ class DataProvider():
         except(Exception):
             raise LaspyException("Error mapping file.")
         if greedy:
-            #self._mmap.seek(0,0)
-            #self._mmap.read(self._mmap.size()) 
             self._mmap[0:len(self._mmap):4]
 
 
@@ -152,8 +150,9 @@ class FileManager():
         self.vlrs = False
         self.header = header  
         self.mode = mode
-        self.data_provider = PseudoMapDataProvider(filename, mode)
-        
+        #self.data_provider = PseudoMapDataProvider(filename, mode)
+        self.data_provider = DataProvider(filename)
+
         self.header_changes = set()
         self.header_properties = {}
         self.c_packers = {} 
