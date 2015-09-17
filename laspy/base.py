@@ -83,14 +83,23 @@ class DataProvider():
                     self._mmap.flush()
                     self._mmap.close()
                     self._mmap = False
+                    del(self._pmap)
                     self._pmap = False
+                    del(self.pointfmt)
+                    self.pointfmt = False
                 except(Exception):
                     raise laspy.util.LaspyException("Error closing mmap")
         self._mmap = False
+        del(self._pmap)
         self._pmap = False
+        del(self.pointfmt)
+        self.pointfmt = False
+
         if self.fileref != False:
             try:
                 self.fileref.close()
+                del(self.fileref)
+                self.fileref = False
             except(Exception):
                 raise laspy.util.LaspyException("Error closing file.")
 
@@ -772,6 +781,10 @@ class Reader(FileManager):
     def close(self):
         '''Close the file.'''
         self.data_provider.close() 
+        del(self.header)
+        del(self.point_refs)
+        del(self.header_changes)
+        del(self.header_properties)
     
     def __del__(self):
         self.close()
@@ -786,6 +799,11 @@ class Writer(FileManager):
                 self.header.update_histogram()
             self.header.update_min_max(minmax_mode) 
         self.data_provider.close()
+        del(self.header)
+        del(self.point_refs)
+        del(self.header_changes)
+        del(self.header_properties)
+
    
     def __del__(self): 
         self.close()
