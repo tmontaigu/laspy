@@ -16,6 +16,7 @@ try:
 except NameError:
     string_type = str
 
+
 def leap_year(year):
     if ((year % 4) != 0):
         return False
@@ -24,6 +25,7 @@ def leap_year(year):
     elif ((year % 400) != 0):
         return False
     return True
+
 
 ## NOTE: set_attr methods are currently not implemented. These methods need
 ## to update the file using reader/mmap. 
@@ -34,7 +36,7 @@ class LaspyHeaderException(Exception):
 class ParseableVLR():
     def parse_data(self):
         '''Attempt to read VLR or EVLR body into the parsed_body attribute.'''
- 
+
         if "LASF_Projection" in self.user_id and self.record_id == 2111:
             # OGC Math Transform WKT Record
             self.body_fmt = util.Format(None)
@@ -51,14 +53,14 @@ class ParseableVLR():
             self.body_fmt.add("wKeyDirectoryVersion", "ctypes.c_ushort", 1)
             self.body_fmt.add("wKeyRevision", "ctypes.c_ushort", 1)
             self.body_fmt.add("wMinorRevision", "ctypes.c_ushort", 1)
-            self.body_fmt.add("wNumberOfKeys", "ctypes.c_ushort", 1)   
+            self.body_fmt.add("wNumberOfKeys", "ctypes.c_ushort", 1)
             # Rest is made up of arrays of 4 unsigned shorts. 
-            bytes_left = (self.rec_len_after_header - 4*2)
-            if bytes_left % (4*2) != 0:
+            bytes_left = (self.rec_len_after_header - 4 * 2)
+            if bytes_left % (4 * 2) != 0:
                 print("WARNING: Invalid body length for GeoKeyDictionaryTag, Not parsing.")
                 self.body_fmt = None
                 return
-            for sKeyEntry in xrange(int(bytes_left/8)):
+            for sKeyEntry in xrange(int(bytes_left / 8)):
                 self.body_fmt.add("wKeyId_%i" % sKeyEntry, "ctypes.c_ushort", 1)
                 self.body_fmt.add("wTIFFTagLocation_%i" % sKeyEntry, "ctypes.c_ushort", 1)
                 self.body_fmt.add("wCount_%i" % sKeyEntry, "ctypes.c_ushort", 1)
@@ -70,7 +72,7 @@ class ParseableVLR():
             if self.rec_len_after_header % 8 != 0:
                 print("WARNING: Invalid body length for GeoDoubleParamsTag, not parsing.")
                 return
-            for i in xrange(int(self.rec_len_after_header/8)):
+            for i in xrange(int(self.rec_len_after_header / 8)):
                 self.body_fmt.add("param_%i" % i, "ctypes.c_double", 1)
 
         elif "LASF_Projection" in self.user_id and self.record_id == 34737:
@@ -99,7 +101,7 @@ class ParseableVLR():
                 self.body_fmt.add("Filename_%i", "ctypes.c_char", 256)
 
         elif "LASF_Spec" in self.user_id and self.record_id == 3:
-            #Text Area Description
+            # Text Area Description
             self.body_fmt = util.Format(None)
             self.body_fmt.add("text_area_description", "ctypes.c_char", self.rec_len_after_header)
 
@@ -110,18 +112,18 @@ class ParseableVLR():
         elif "LASF_Spec" in self.user_id and self.record_id > 99 and self.record_id < 355:
             # WAVEFORM PACKET DESCRIPTOR
             self.body_fmt = util.Format(None)
-            self.body_fmt.add("bits_per_sample", "ctypes.c_ubyte",1)
-            self.body_fmt.add("waveform_compression_type", "ctypes.c_ubyte",1)
-            self.body_fmt.add("number_of_samples", "ctypes.c_ulong",1)
-            self.body_fmt.add("temporal_time_spacing", "ctypes.c_ulong",1)
-            self.body_fmt.add("digitizer_gain", "ctypes.c_double",1)
-            self.body_fmt.add("digitizer_offset", "ctypes.c_double",1)
+            self.body_fmt.add("bits_per_sample", "ctypes.c_ubyte", 1)
+            self.body_fmt.add("waveform_compression_type", "ctypes.c_ubyte", 1)
+            self.body_fmt.add("number_of_samples", "ctypes.c_ulong", 1)
+            self.body_fmt.add("temporal_time_spacing", "ctypes.c_ulong", 1)
+            self.body_fmt.add("digitizer_gain", "ctypes.c_double", 1)
+            self.body_fmt.add("digitizer_offset", "ctypes.c_double", 1)
 
         if self.body_fmt != None:
             self.parsed_body = struct.unpack(self.body_fmt.pt_fmt_long, self.VLR_body)
         else:
             self.parsed_body = None
-    
+
     def pack_data(self):
         '''Pack data from parsed_body into VLR_body.'''
         if self.body_fmt == None:
@@ -141,8 +143,9 @@ class ParseableVLR():
         idx = 0
         for i in self.body_fmt:
             out = str(self.parsed_body[idx])
-            print(i.name + ": " + (20-len(i.name))*" "  + out)
+            print(i.name + ": " + (20 - len(i.name)) * " " + out)
             idx += 1
+
 
 class ExtraBytesStruct(object):
     '''This class provides a frontend for the Extra Bytes Struct as defined
@@ -150,35 +153,36 @@ class ExtraBytesStruct(object):
     unless specified - the two really key ones are name and data_type. This structure
     lives in the VLR_body property of a laspy.header.VLR instance, and multiple 
     ExtraByteStruct records can be present together. Each ExtraBytesStruct instance
-    describes an additional dimension present at the end of each point record. ''' 
-    def __init__(self, data_type = 0, options = 0, name = "\x00"*32,
-                 unused = [0]*4, no_data = [0.0]*3, min = [0.0]*3, 
-                 max = [0.0]*3, scale = [1.0]*3, offset = [0.0]*3,
-                 description = "\x00"*32):
+    describes an additional dimension present at the end of each point record. '''
+
+    def __init__(self, data_type=0, options=0, name="\x00" * 32,
+                 unused=[0] * 4, no_data=[0.0] * 3, min=[0.0] * 3,
+                 max=[0.0] * 3, scale=[1.0] * 3, offset=[0.0] * 3,
+                 description="\x00" * 32):
         self.fmt = util.Format("extra_bytes_struct")
         self.packer = struct.Struct(self.fmt.pt_fmt_long)
         self.writeable = True
         self.vlr_parent = False
         self.names = [x.name for x in self.fmt.specs]
 
-        self.data = b"\x00"*192
-        self.set_property("data_type" , data_type)
-        self.set_property("options" , options)
-        self.set_property("name" , name + "\x00"*(32-len(name)))
-        self.set_property("unused" , unused )
-        self.set_property("no_data" , no_data)
-        self.set_property("min" , min)
-        self.set_property("max" , max)
-        self.set_property("scale" , scale )
-        self.set_property("offset" , offset)
-        self.set_property("description" , description + "\x00"*(32-len(description)))
+        self.data = b"\x00" * 192
+        self.set_property("data_type", data_type)
+        self.set_property("options", options)
+        self.set_property("name", name + "\x00" * (32 - len(name)))
+        self.set_property("unused", unused)
+        self.set_property("no_data", no_data)
+        self.set_property("min", min)
+        self.set_property("max", max)
+        self.set_property("scale", scale)
+        self.set_property("offset", offset)
+        self.set_property("description", description + "\x00" * (32 - len(description)))
 
     def build_from_vlr(self, vlr_parent, body_offset):
         self.writeable = False
-        self.data = vlr_parent.VLR_body[192*body_offset:192*(body_offset + 1)]
+        self.data = vlr_parent.VLR_body[192 * body_offset:192 * (body_offset + 1)]
         self.vlr_parent = vlr_parent
         self.body_offset = body_offset
-    
+
     def assertWriteable(self):
         if self.writeable or self.vlr_parent.reader == False:
             return
@@ -191,22 +195,22 @@ class ExtraBytesStruct(object):
         idx = 0
         for i in self.names:
             if name == i:
-                return(idx)
+                return (idx)
             idx += 1
         raise util.LaspyException("Property: " + str(name) + " not found. ")
 
     def get_property(self, name):
         fmt = self.fmt.specs[self.get_property_idx(name)]
-        unpacked = struct.unpack(fmt.full_fmt, 
-                   self.data[fmt.offs:(fmt.offs + fmt.length*fmt.num)])
+        unpacked = struct.unpack(fmt.full_fmt,
+                                 self.data[fmt.offs:(fmt.offs + fmt.length * fmt.num)])
         if len(unpacked) == 1:
-            return(unpacked[0])
-        return(unpacked)
-    
+            return (unpacked[0])
+        return (unpacked)
+
     def to_byte_string(self):
         '''Return the struct as a string of raw bytes. This is useful for providing
         the struct to a VLR instance via VLR_body.'''
-        return(self.data)
+        return (self.data)
 
     def set_property(self, name, value):
         self.assertWriteable()
@@ -222,96 +226,117 @@ class ExtraBytesStruct(object):
         self.data = self.data[0:fmt.offs] + packed + self.data[fmt.offs + len(packed):len(self.data)]
 
         if self.vlr_parent != False:
-            idx_start = 192*self.body_offset
-            idx_stop = 192*(self.body_offset + 1) 
+            idx_start = 192 * self.body_offset
+            idx_stop = 192 * (self.body_offset + 1)
             d1 = self.vlr_parent.VLR_body[0:idx_start]
             d2 = self.vlr_parent.VLR_body[idx_stop:len(self.vlr_parent.VLR_body)]
             self.vlr_parent.VLR_body = (d1 + self.data + d2)
         return
 
     def get_reserved(self):
-        return(self.get_property("reserved"))
+        return (self.get_property("reserved"))
+
     def set_reserved(self, value):
         self.set_property("reserved", value)
+
     reserved = property(get_reserved, set_reserved, None, None)
 
     def get_data_type(self):
-        return(self.get_property("data_type"))
+        return (self.get_property("data_type"))
+
     def set_data_type(self, value):
         self.set_property("data_type", value)
+
     data_type = property(get_data_type, set_data_type, None, None)
 
     def get_options(self):
-        return(self.get_property("options"))
+        return (self.get_property("options"))
+
     def set_options(self, value):
         self.set_property("options", value)
+
     options = property(get_options, set_options, None, None)
 
     def get_name(self):
-        return(self.get_property("name"))
+        return (self.get_property("name"))
+
     def set_name(self, value):
         self.set_property("name", value)
+
     name = property(get_name, set_name, None, None)
 
     def get_no_data(self):
-        return(self.get_property("no_data"))
+        return (self.get_property("no_data"))
+
     def set_no_data(self, value):
         self.set_property("no_data", value)
+
     no_data = property(get_no_data, set_no_data, None, None)
 
     def get_min(self):
-        return(self.get_property("min"))
+        return (self.get_property("min"))
+
     def set_min(self, value):
         self.set_property("min", value)
+
     min = property(get_min, set_min, None, None)
 
     def get_max(self):
-        return(self.get_property("max"))
+        return (self.get_property("max"))
+
     def set_max(self, value):
         self.set_property("max", value)
+
     max = property(get_max, set_max, None, None)
 
-    def get_scale(self): 
-        return(self.get_property("scale"))
+    def get_scale(self):
+        return (self.get_property("scale"))
+
     def set_scale(self, value):
         self.set_property("scale", value)
+
     scale = property(get_scale, set_scale, None, None)
 
     def get_offset(self):
-        return(self.get_property("offset"))
+        return (self.get_property("offset"))
+
     def set_offset(self, value):
         self.set_property("offset", value)
+
     offset = property(get_offset, set_offset, None, None)
 
     def get_description(self):
-        return(self.get_property("description"))
+        return (self.get_property("description"))
+
     def set_description(self):
         self.set_property(self, "description")
+
     description = property(get_description, set_description, None, None)
 
-        
+
 class EVLR(ParseableVLR):
     ''' An extended VLR as defined in LAS specification 1.4'''
+
     def __init__(self, user_id, record_id, VLR_body, **kwargs):
         '''Build the EVLR using the required arguments user_id, record_id, and
         VLR_body. The user can also specify the reserved and description fields if desired.'''
-        self.user_id = str(user_id) + "\x00"*(16-len(str(user_id)))
+        self.user_id = str(user_id) + "\x00" * (16 - len(str(user_id)))
         self.record_id = record_id
         self.VLR_body = VLR_body
         self.body_fmt = None
 
-        try: 
-            self.rec_len_after_header = len(self.VLR_body) 
+        try:
+            self.rec_len_after_header = len(self.VLR_body)
         except(TypeError):
             self.rec_len_after_header = 0
         if "description" in kwargs:
-            self.description = str(kwargs["description"]) + "\x00"*(32-len(kwargs["description"]))
+            self.description = str(kwargs["description"]) + "\x00" * (32 - len(kwargs["description"]))
         else:
-            self.description = "\x00"*32
+            self.description = "\x00" * 32
         if "reserved" in kwargs:
             self.reserved = kwargs["reserved"]
         else:
-            self.reserved = 0 
+            self.reserved = 0
         self.fmt = util.Format("EVLR")
         self.isEVLR = True
         self.type = 0
@@ -336,7 +361,6 @@ class EVLR(ParseableVLR):
                 new_rec.build_from_vlr(self, i)
             self.add_extra_dim(new_rec)
 
-
     def build_from_reader(self, reader):
         '''Build an evlr from a reader capable of reading in the data.'''
         self.reserved = reader.read_words("reserved", "evlr")
@@ -357,13 +381,11 @@ class EVLR(ParseableVLR):
             print("Error Parsing EVLR Body Data:")
             print(err)
 
-
-
     def __len__(self):
         '''Return the size of the evlr object in bytes'''
         return self.rec_len_after_header + 60
 
-    def pack(self, name, val): 
+    def pack(self, name, val):
         '''Pack an EVLR field into bytes.'''
         spec = self.fmt.lookup[name]
         if isinstance(val, bytes):
@@ -371,36 +393,37 @@ class EVLR(ParseableVLR):
         elif isinstance(val, string_type):
             return val.encode()
         elif spec.num == 1:
-            return(struct.pack(spec.full_fmt, val))
-        return(struct.pack(spec.fmt[0]+spec.fmt[1]*len(val), *val))
-    
+            return (struct.pack(spec.full_fmt, val))
+        return (struct.pack(spec.fmt[0] + spec.fmt[1] * len(val), *val))
+
     def to_byte_string(self):
         '''Pack the entire EVLR into a byte string.'''
         if type(self.parsed_body) != type(None):
             self.pack_data()
-        out = (self.pack("reserved", self.reserved) + 
-               self.pack("user_id", self.user_id) + 
-               self.pack("record_id", self.record_id) + 
-               self.pack("rec_len_after_header", self.rec_len_after_header) + 
+        out = (self.pack("reserved", self.reserved) +
+               self.pack("user_id", self.user_id) +
+               self.pack("record_id", self.record_id) +
+               self.pack("rec_len_after_header", self.rec_len_after_header) +
                self.pack("description", self.description) +
                self.VLR_body)
         diff = (self.rec_len_after_header - len(self.VLR_body))
         if diff > 0:
-            out += b"\x00"*diff
+            out += b"\x00" * diff
         elif diff < 0:
-            raise util.LaspyException("Invalid Data in EVLR: too long for specified rec_len." + 
-                                " rec_len_after_header = " + str(self.rec_len_after_header) + 
-                                " actual length = " + str(len(self.VLR_body)))
-        return(out)
+            raise util.LaspyException("Invalid Data in EVLR: too long for specified rec_len." +
+                                      " rec_len_after_header = " + str(self.rec_len_after_header) +
+                                      " actual length = " + str(len(self.VLR_body)))
+        return (out)
 
 
 class VLR(ParseableVLR):
     '''An object to create/read/store data from LAS Variable Length Records.
     Requires three arguments: (user_id, string[16]), (record_id, int2), (VLR_body, any data with len < ~65k)'''
+
     def __init__(self, user_id, record_id, VLR_body, **kwargs):
         '''Build the VLR using the required arguments user_id, record_id, and VLR_body
         the user can also specify the reserved and description fields here if desired.'''
-        self.user_id = str(user_id) + "\x00"*(16-len(str(user_id)))
+        self.user_id = str(user_id) + "\x00" * (16 - len(str(user_id)))
         self.record_id = record_id
         self.VLR_body = VLR_body
         self.type = 0
@@ -411,9 +434,9 @@ class VLR(ParseableVLR):
         except(TypeError):
             self.rec_len_after_header = 0
         if "description" in kwargs:
-            self.description = str(kwargs["description"]) + "\x00"*(32-len(kwargs["description"]))
+            self.description = str(kwargs["description"]) + "\x00" * (32 - len(kwargs["description"]))
         else:
-            self.description = "\x00"*32
+            self.description = "\x00" * 32
         if "reserved" in kwargs:
             self.reserved = kwargs["reserved"]
         else:
@@ -427,8 +450,6 @@ class VLR(ParseableVLR):
         except Exception as err:
             print("Error Parsing VLR Body Data:")
             print(err)
-
-
 
     def build_from_reader(self, reader):
         '''Build a vlr from a reader capable of reading in the data.'''
@@ -450,9 +471,6 @@ class VLR(ParseableVLR):
             print("Error Parsing VLR Body Data:")
             print(err)
 
-
-
-
     def setup_extra_bytes_spec(self, VLR_body):
         self.type = 1
         self.extra_dimensions = []
@@ -465,18 +483,17 @@ class VLR(ParseableVLR):
                 new_rec = ExtraBytesStruct()
                 new_rec.build_from_vlr(self, i)
                 self.add_extra_dim(new_rec)
-        
+
     def add_extra_dim(self, new_rec):
         new_name = new_rec.name.decode().replace("\x00", "").replace(" ", "_").lower()
         self.__dict__[new_name] = new_rec
         self.extra_dimensions.append(new_rec)
 
-
     def __len__(self):
         '''Return the size of the vlr object in bytes'''
         return self.rec_len_after_header + 54
 
-    def pack(self, name, val): 
+    def pack(self, name, val):
         '''Pack a VLR field into bytes.'''
         spec = self.fmt.lookup[name]
         if isinstance(val, bytes):
@@ -484,34 +501,36 @@ class VLR(ParseableVLR):
         elif isinstance(val, string_type):
             return val.encode()
         elif spec.num == 1:
-            return(struct.pack(spec.fmt, val))
-        return(struct.pack(spec.fmt[0]+spec.fmt[1]*len(val), *val))
+            return (struct.pack(spec.fmt, val))
+        return (struct.pack(spec.fmt[0] + spec.fmt[1] * len(val), *val))
 
     def to_byte_string(self):
         '''Pack the entire VLR into a byte string.'''
         if type(self.parsed_body) != type(None):
             self.pack_data()
-        out = (self.pack("reserved", self.reserved) + 
+        out = (self.pack("reserved", self.reserved) +
                self.pack("user_id", self.user_id) +
-               self.pack("record_id", self.record_id) + 
-               self.pack("rec_len_after_header", self.rec_len_after_header) + 
+               self.pack("record_id", self.record_id) +
+               self.pack("rec_len_after_header", self.rec_len_after_header) +
                self.pack("description", self.description) +
                self.VLR_body)
         diff = (self.rec_len_after_header - len(self.VLR_body))
         if diff > 0:
-            out += b"\x00"*diff
+            out += b"\x00" * diff
         elif diff < 0:
-            raise util.LaspyException("Invalid Data in VLR: too long for specified rec_len." + 
-                                " rec_len_after_header = " + str(self.rec_len_after_header) + 
-                                " actual length = " + str(len(self.VLR_body)))
-        return(out)
+            raise util.LaspyException("Invalid Data in VLR: too long for specified rec_len." +
+                                      " rec_len_after_header = " + str(self.rec_len_after_header) +
+                                      " actual length = " + str(len(self.VLR_body)))
+        return (out)
+
 
 class Header(object):
     '''The low level header class. Header is built from a laspy.util.Format 
     instance, or assumes a default file format of 1.2. Header is usually interacted with via
     the HeaderManager class, an instance of which readers, writers, and file 
     objects retain a reference of.'''
-    def __init__(self, file_version = 1.2, point_format = 0, **kwargs):
+
+    def __init__(self, file_version=1.2, point_format=0, **kwargs):
         # At least generate a default las format
         fmt = util.Format("h" + str(file_version))
         kwargs["version_major"] = str(file_version)[0]
@@ -538,10 +557,10 @@ class Header(object):
 
         # Clear no longer available fields. 
         for item in self._format.specs:
-            if not item.name in new_format.lookup.keys(): 
+            if not item.name in new_format.lookup.keys():
                 self.__dict__[item.name] = None
         if str(file_version) == "1.4":
-            self.point_return_count.extend([0]*10)
+            self.point_return_count.extend([0] * 10)
         self._format = new_format
 
     def get_format(self):
@@ -553,22 +572,22 @@ class Header(object):
     format = property(get_format, reformat, None, doc)
 
 
-
 class HeaderManager(object):
     '''HeaderManager provides the public API for interacting with header objects. 
     It requires a Header instance and a reader/writer instance. 
     HeaderManager instances are referred to in reader/writer/file object code as header.'''
+
     def __init__(self, header, reader):
         '''Build the header manager object'''
         self.reader = reader
         self.writer = reader
-        self._header = header 
+        self._header = header
         self.file_mode = reader.mode
         if self.file_mode == "w":
             self.allow_all_overwritables()
 
     def copy(self):
-        return(self.__copy__())
+        return (self.__copy__())
 
     def __copy__(self):
         '''Populate and return a Header instance with data matching the file to which 
@@ -597,14 +616,14 @@ class HeaderManager(object):
         if self.file_mode == "r":
             raise LaspyHeaderException("Header instance is not in write mode.")
 
-    def read_words(self, offs, fmt,num, length, pack):
+    def read_words(self, offs, fmt, num, length, pack):
         '''Read binary data'''
-        self.reader.seek(offs,rel=False)
+        self.reader.seek(offs, rel=False)
         out = self.reader._read_words(fmt, num, length)
         if pack:
-            return("".join(out))
-        return(out)
-        
+            return ("".join(out))
+        return (out)
+
     def get_filesignature(self):
         '''Returns the file signature for the file. It should always be
         LASF'''
@@ -621,18 +640,20 @@ class HeaderManager(object):
         '''Set the file source id'''
         self.assertWriteMode()
         self.writer.set_header_property("file_source_id", value)
+
     doc = '''The file source ID for the file.'''
     filesource_id = property(get_filesourceid, set_filesourceid, None, doc)
     file_source_id = filesource_id
 
     def get_global_encoding(self):
         '''Get the global encoding'''
-        return(self.reader.get_header_property("global_encoding"))
+        return (self.reader.get_header_property("global_encoding"))
 
     def set_global_encoding(self, value):
         self.assertWriteMode()
         self.writer.set_header_property("global_encoding", value)
         return
+
     doc = '''Global encoding for the file.
 
     From the specification:
@@ -648,25 +669,26 @@ class HeaderManager(object):
                                doc)
     encoding = global_encoding
 
-
     doc = '''Indicates the meaning of GPS Time in the point records. 
              If gps_time_type is zero, then GPS Time is GPS Week Time. Otherwise
              it refers to sattelite GPS time.'''
+
     def get_gps_time_type(self):
         raw_encoding = self.get_global_encoding()
-        return(self.reader.binary_str(raw_encoding, 16)[0])
+        return (self.reader.binary_str(raw_encoding, 16)[0])
+
     def set_gps_time_type(self, value):
         self.assertWriteMode()
-        raw_encoding = self.reader.binary_str(self.get_global_encoding(),16)       
-        self.set_global_encoding(self.reader.packed_str(str(value) 
-                                + raw_encoding[1:]))
+        raw_encoding = self.reader.binary_str(self.get_global_encoding(), 16)
+        self.set_global_encoding(self.reader.packed_str(str(value)
+                                                        + raw_encoding[1:]))
         return
 
     gps_time_type = property(get_gps_time_type, set_gps_time_type, None, doc)
 
     def get_waveform_data_packets_internal(self):
         raw_encoding = self.get_global_encoding()
-        return(self.reader.binary_str(raw_encoding, 16)[1])
+        return (self.reader.binary_str(raw_encoding, 16)[1])
 
     def set_waveform_data_packets_internal(self, value):
         self.assertWriteMode()
@@ -674,13 +696,13 @@ class HeaderManager(object):
         self.set_global_encoding(self.reader.packed_str(raw_encoding[0] + str(value) + raw_encoding[2:]))
         return
 
-    waveform_data_packets_internal = property(get_waveform_data_packets_internal, 
+    waveform_data_packets_internal = property(get_waveform_data_packets_internal,
                                               set_waveform_data_packets_internal,
                                               None, None)
 
     def get_waveform_data_packets_external(self):
         raw_encoding = self.get_global_encoding()
-        return(self.reader.binary_str(raw_encoding, 16)[2])
+        return (self.reader.binary_str(raw_encoding, 16)[2])
 
     def set_waveform_data_packets_external(self, value):
         self.assertWriteMode()
@@ -689,11 +711,12 @@ class HeaderManager(object):
         return
 
     waveform_data_packets_external = property(get_waveform_data_packets_external,
-                                              set_waveform_data_packets_external, 
+                                              set_waveform_data_packets_external,
                                               None, None)
+
     def get_synthetic_return_num(self):
         raw_encoding = self.get_global_encoding()
-        return(self.reader.binary_str(raw_encoding, 16)[3])
+        return (self.reader.binary_str(raw_encoding, 16)[3])
 
     def set_synthetic_return_num(self, value):
         self.assertWriteMode()
@@ -701,13 +724,13 @@ class HeaderManager(object):
         self.set_global_encoding(self.reader.packed_str(raw_encoding[0:3] + str(value) + raw_encoding[4:]))
         return
 
-    synthetic_return_num = property(get_synthetic_return_num, set_synthetic_return_num, 
+    synthetic_return_num = property(get_synthetic_return_num, set_synthetic_return_num,
                                     None, None)
 
     def get_wkt(self):
         if self.data_format_id > 5:
             raw_encoding = self.get_global_encoding()
-            return(self.reader.binary_str(raw_encoding, 16)[4])
+            return (self.reader.binary_str(raw_encoding, 16)[4])
         else:
             raise util.LaspyException("WKT not present in data_format_id " + str(self.data_format_id))
 
@@ -721,13 +744,13 @@ class HeaderManager(object):
 
     wkt = property(get_wkt, set_wkt, None, None)
 
-    def get_projectid(self): 
+    def get_projectid(self):
         p1 = self.reader.get_raw_header_property("proj_id_1")
         p2 = self.reader.get_raw_header_property("proj_id_2")
         p3 = self.reader.get_raw_header_property("proj_id_3")
-        p4 = self.reader.get_raw_header_property("proj_id_4") 
-        return(uuid.UUID(bytes =p1+p2+p3+p4))
- 
+        p4 = self.reader.get_raw_header_property("proj_id_4")
+        return (uuid.UUID(bytes=p1 + p2 + p3 + p4))
+
     doc = '''ProjectID for the file.  \
         laspy does not currently support setting this value from Python, as
         it is the same as :obj:`laspy.header.Header.guid`. Use that to
@@ -748,7 +771,7 @@ class HeaderManager(object):
 
     def get_guid(self):
         '''Returns the GUID for the file as a :obj:`uuid.UUID` object.'''
-        return self.get_projectid() 
+        return self.get_projectid()
 
     def set_guid(self, value):
         raw_bytes = value.bytes_le
@@ -764,6 +787,7 @@ class HeaderManager(object):
         '''Sets the GUID for the file. It must be a :class:`uuid.UUID`
         instance'''
         return
+
     doc = '''The GUID/:obj:`laspy.header.Header.project_id` for the file. 
     Accepts a :obj:`uuid.UUID` object.'''
     guid = property(get_guid, set_guid, None, doc)
@@ -771,7 +795,7 @@ class HeaderManager(object):
     def get_majorversion(self):
         '''Returns the major version for the file. Expect this value to always
         be 1'''
-        return self.reader.get_header_property("version_major") 
+        return self.reader.get_header_property("version_major")
 
     def set_majorversion(self, value):
         '''Sets the major version for the file. Only the value 1 is accepted
@@ -779,6 +803,7 @@ class HeaderManager(object):
         self.assertWriteMode()
         self.writer.set_header_property("version_major", value)
         return
+
     doc = '''The major version for the file, always 1'''
     major_version = property(get_majorversion, set_majorversion, None, doc)
     version_major = major_version
@@ -787,14 +812,15 @@ class HeaderManager(object):
     def get_minorversion(self):
         '''Returns the minor version of the file. Expect this value to always
         be 0, 1, or 2'''
-        return self.reader.get_header_property("version_minor") 
+        return self.reader.get_header_property("version_minor")
 
     def set_minorversion(self, value):
         '''Sets the minor version of the file. The value should be 0 for 1.0
         LAS files, 1 for 1.1 LAS files ...'''
         self.assertWriteMode()
-        self.writer.set_header_property("version_minor",value)
-        return 
+        self.writer.set_header_property("version_minor", value)
+        return
+
     doc = '''The minor version for the file.'''
     minor_version = property(get_minorversion, set_minorversion, None, doc)
     version_minor = minor_version
@@ -807,9 +833,10 @@ class HeaderManager(object):
         self.writer.set_header_property("version_minor", int(minor))
 
     def get_version(self):
-        major = self.reader.get_header_property("version_major") 
-        minor = self.reader.get_header_property("version_minor") 
+        major = self.reader.get_header_property("version_major")
+        minor = self.reader.get_header_property("version_minor")
         return '%d.%d' % (major, minor)
+
     doc = '''The version as a dotted string for the file (ie, '1.0', '1.1',
     etc)'''
     version = property(get_version, set_version, None, doc)
@@ -824,6 +851,7 @@ class HeaderManager(object):
         self.assertWriteMode()
         self.writer.set_header_property("system_id", value)
         return
+
     doc = '''The system ID for the file'''
     system_id = property(get_systemid, set_systemid, None, doc)
 
@@ -835,8 +863,9 @@ class HeaderManager(object):
         '''Sets the software identifier.
         '''
         self.assertWriteMode()
-        return(self.writer.set_header_property("software_id", value))
-    doc = '''The software ID for the file''' 
+        return (self.writer.set_header_property("software_id", value))
+
+    doc = '''The software ID for the file'''
     software_id = property(get_softwareid, set_softwareid, None, doc)
 
     def get_date(self):
@@ -846,12 +875,12 @@ class HeaderManager(object):
         Note that dates in LAS headers are not transitive because the header
         only stores the year and the day number.
         '''
-        day = self.reader.get_header_property("created_day") 
+        day = self.reader.get_header_property("created_day")
         year = self.reader.get_header_property("created_year")
 
         if year == 0 and day == 0:
             return None
-        return datetime.datetime(year,1,1) + datetime.timedelta(day - 1)
+        return datetime.datetime(year, 1, 1) + datetime.timedelta(day - 1)
 
     def set_date(self, value=datetime.datetime.now()):
         '''Set the header's date from a :obj:`datetime.datetime` instance.
@@ -888,7 +917,8 @@ class HeaderManager(object):
     def set_headersize(self, val):
         self.assertWriteMode()
         self.writer.set_header_property("header size", val)
-    doc = '''The header size for the file. You probably shouldn't touch this.''' 
+
+    doc = '''The header size for the file. You probably shouldn't touch this.'''
     header_size = property(get_headersize, set_headersize, None, doc)
     header_length = header_size
 
@@ -905,15 +935,16 @@ class HeaderManager(object):
         '''
         self.assertWriteMode()
         ## writer.set_padding handles data offset update.
-        self.writer.set_padding(value-self.writer.vlr_stop) 
+        self.writer.set_padding(value - self.writer.vlr_stop)
         return
+
     doc = '''The offset to the point data in the file. This can not be smaller then the header size + VLR length. '''
     data_offset = property(get_dataoffset, set_dataoffset, None, doc)
 
     def get_padding(self):
         '''Returns number of bytes between the end of the VLRs and the 
            beginning of the point data.'''
-        return self.reader.get_padding() 
+        return self.reader.get_padding()
 
     def set_padding(self, value):
         '''Sets the header's padding.
@@ -921,6 +952,7 @@ class HeaderManager(object):
         self.assertWriteMode()
         self.writer.set_padding(value)
         return
+
     doc = '''The number of bytes between the end of the VLRs and the 
     beginning of the point data.
     '''
@@ -928,39 +960,40 @@ class HeaderManager(object):
 
     def get_recordscount(self):
         return self.reader.get_pointrecordscount()
+
     doc = '''Returns the number of user-defined header records in the header. 
     '''
-    records_count = property(get_recordscount, None, None, doc) 
+    records_count = property(get_recordscount, None, None, doc)
 
     def get_dataformatid(self):
         '''The point format value as an integer
         '''
-        return self.reader.get_header_property("data_format_id") 
+        return self.reader.get_header_property("data_format_id")
 
     def set_dataformatid(self, value):
         '''Set the data format ID. This is only available for files in write mode which have not yet been given points.'''
         if value not in range(6):
             raise LaspyHeaderException("Format ID must be 3, 2, 1, or 0")
         if not self.file_mode in ("w", "w+"):
-            raise LaspyHeaderException("Point Format ID can only be set for " + 
-                                        "files in write or append mode.")
+            raise LaspyHeaderException("Point Format ID can only be set for " +
+                                       "files in write or append mode.")
         if self.writer.get_pointrecordscount() > 0:
-            raise LaspyHeaderException("Modification of the format of existing " + 
-                                        "points is not currently supported. Make " + 
-                                        "your modifications in numpy and create " + 
-                                        "a new file.")
+            raise LaspyHeaderException("Modification of the format of existing " +
+                                       "points is not currently supported. Make " +
+                                       "your modifications in numpy and create " +
+                                       "a new file.")
         self.writer.set_header_property("data_format_id", value)
-        return 
+        return
+
     '''The data format ID for the file, determines what point fields are present.'''
     dataformat_id = property(get_dataformatid, set_dataformatid, None, doc)
     data_format_id = dataformat_id
-    
 
     def get_datarecordlength(self):
         '''Return the size of each point record'''
-        #lenDict = {0:20,1:28,2:26,3:34,4:57,5:63}
-        #return lenDict[self.data_format_id] 
-        return(self.reader.get_header_property("data_record_length"))
+        # lenDict = {0:20,1:28,2:26,3:34,4:57,5:63}
+        # return lenDict[self.data_format_id]
+        return (self.reader.get_header_property("data_record_length"))
 
     doc = '''The length of each point record.'''
     data_record_length = property(get_datarecordlength,
@@ -970,24 +1003,27 @@ class HeaderManager(object):
 
     def get_schema(self):
         '''Get the :obj:`laspy.base.Format` object for the header instance.'''
-        return(self.reader.header_format)
+        return (self.reader.header_format)
 
     doc = '''The header format for the file. Supports .xml and .etree methods.'''
+
     def set_schema(self, value):
-        if self.file_mode != "w": 
+        if self.file_mode != "w":
             raise NotImplementedError("Converseion between formats is not supported.")
         else:
             self.reader.header_format = value
-    schema = property(get_schema, set_schema, None, doc) 
-    header_format = schema
-    def get_compressed(self):
-        return(self.reader.point_format.compressed)
 
+    schema = property(get_schema, set_schema, None, doc)
+    header_format = schema
+
+    def get_compressed(self):
+        return (self.reader.point_format.compressed)
 
     def set_compressed(self, value):
         self.reader.point_format.compressed = value
         self.reader.compressed = value
         return
+
     doc = '''Controls compression for this file.
 
     If True, the file is compressed with lasZIP compression and will
@@ -1005,10 +1041,10 @@ class HeaderManager(object):
         return self.reader.get_pointrecordscount()
 
     def set_pointrecordscount(self, value):
-        if not self.file_mode in ("w", "w+","rw"):
+        if not self.file_mode in ("w", "w+", "rw"):
             raise LaspyHeaderException("File must be open in a write mode to modify point_records_count.")
         self.writer.set_header_property("point_records_count", value)
-        
+
         '''Sets the number of point records expected in the file.
 
         .. note::
@@ -1018,11 +1054,12 @@ class HeaderManager(object):
             closed after writing data.
         '''
         return
+
     set_count = set_pointrecordscount
     get_count = get_pointrecordscount
     point_records_count = property(get_pointrecordscount,
                                    set_pointrecordscount)
-    count = point_records_count 
+    count = point_records_count
 
     __len__ = get_pointrecordscount
 
@@ -1031,7 +1068,7 @@ class HeaderManager(object):
         0...8
         '''
 
-        return self.reader.get_header_property("point_return_count")   
+        return self.reader.get_header_property("point_return_count")
 
     def set_pointrecordsbyreturncount(self, value):
 
@@ -1041,8 +1078,9 @@ class HeaderManager(object):
         '''
         self.assertWriteMode()
         self.writer.set_header_property("point_return_count", value)
-        return  
-    doc = '''The histogram of point records by return number.''' 
+        return
+
+    doc = '''The histogram of point records by return number.'''
     point_return_count = property(get_pointrecordsbyreturncount,
                                   set_pointrecordsbyreturncount,
                                   None,
@@ -1052,41 +1090,42 @@ class HeaderManager(object):
     def update_histogram(self):
         '''Update the histogram of returns by number'''
         rawdata = self.writer.get_return_num()
-        rawdata[rawdata == 0] = 1#
+        rawdata[rawdata == 0] = 1  #
 
-        #if self.version == "1.3":
+        # if self.version == "1.3":
         #    histDict = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0}
-        #elif self.version in ["1.0", "1.1", "1.2"]:
+        # elif self.version in ["1.0", "1.1", "1.2"]:
         #    histDict = {1:0, 2:0, 3:0, 4:0, 5:0}
-        #else:
+        # else:
         #    raise LaspyException("Invalid file version: " + self.version)
-        #for i in rawdata:
+        # for i in rawdata:
         #    histDict[i] += 1        
-        #raw_hist = histDict.values()
-        #if self.data_format_id in (range(6)):
+        # raw_hist = histDict.values()
+        # if self.data_format_id in (range(6)):
         if self.version != "1.4":
-            raw_hist = np.histogram(list(rawdata), bins = range(1,7))
-            
+            raw_hist = np.histogram(list(rawdata), bins=range(1, 7))
+
         else:
-            raw_hist = np.histogram(list(rawdata), bins = range(1,17))
-        #print("Raw Hist: " + str(raw_hist))
-        #t = raw_hist[0][4]
-        #for ret in [3,2,1,0]:
+            raw_hist = np.histogram(list(rawdata), bins=range(1, 17))
+        # print("Raw Hist: " + str(raw_hist))
+        # t = raw_hist[0][4]
+        # for ret in [3,2,1,0]:
         #    raw_hist[0][ret] -= t
         #    t += raw_hist[0][ret]
         try:
             self.writer.set_header_property("point_return_count", raw_hist[0])
         except(util.LaspyException):
-            raise util.LaspyException("There was an error updating the num_points_by_return header field. " + 
-        "This is often caused by mal-formed header information. LAS Specifications differ on the length of this field, "+ 
-        "and it is therefore important to set the header version correctly. In the meantime, try File.close(ignore_header_changes = True)" 
-        )
-    def update_min_max(self, minmax_mode ="scaled"):
+            raise util.LaspyException("There was an error updating the num_points_by_return header field. " +
+                                      "This is often caused by mal-formed header information. LAS Specifications differ on the length of this field, " +
+                                      "and it is therefore important to set the header version correctly. In the meantime, try File.close(ignore_header_changes = True)"
+                                      )
+
+    def update_min_max(self, minmax_mode="scaled"):
         '''Update the min and max X,Y,Z values.'''
         if minmax_mode == "scaled":
-            scale=True
+            scale = True
         elif minmax_mode != "scaled":
-            scale=False
+            scale = False
         x = self.writer.get_x(scale)
         y = self.writer.get_y(scale)
         z = self.writer.get_z(scale)
@@ -1100,8 +1139,8 @@ class HeaderManager(object):
     def get_scale(self):
         '''Gets the scale factors in [x, y, z] for the point data.
         '''
-        return([self.reader.get_header_property(x) for x in 
-                ["x_scale","y_scale", "z_scale"]])
+        return ([self.reader.get_header_property(x) for x in
+                 ["x_scale", "y_scale", "z_scale"]])
 
     def set_scale(self, value):
         '''Sets the scale factors in [x, y, z] for the point data.
@@ -1111,6 +1150,7 @@ class HeaderManager(object):
         self.writer.set_header_property("y_scale", value[1])
         self.writer.set_header_property("z_scale", value[2])
         return
+
     doc = '''The scale factors in [x, y, z] for the point data. 
             From the specification:
             The scale factor fields contain a double floating point value that
@@ -1131,8 +1171,8 @@ class HeaderManager(object):
     def get_offset(self):
         '''Gets the offset factors in [x, y, z] for the point data.
         '''
-        return([self.reader.get_header_property(x) for x in 
-                ["x_offset", "y_offset", "z_offset"]])
+        return ([self.reader.get_header_property(x) for x in
+                 ["x_offset", "y_offset", "z_offset"]])
 
     def set_offset(self, value):
         '''Sets the offset factors in [x, y, z] for the point data.
@@ -1142,6 +1182,7 @@ class HeaderManager(object):
         self.writer.set_header_property("y_offset", value[1])
         self.writer.set_header_property("z_offset", value[2])
         return
+
     doc = '''The offset factors in [x, y, z] for the point data.
 
         From the specification:
@@ -1172,8 +1213,8 @@ class HeaderManager(object):
             For an accuarate result, run header.update_min_max()
             prior to use. 
         '''
-        return([self.reader.get_header_property(x) for x in 
-                ["x_min", "y_min", "z_min"]])
+        return ([self.reader.get_header_property(x) for x in
+                 ["x_min", "y_min", "z_min"]])
 
     def set_min(self, value):
         '''Sets the minimum values of [x, y, z] for the data.
@@ -1182,7 +1223,7 @@ class HeaderManager(object):
         self.assertWriteMode()
         self.writer.set_header_property("x_min", value[0])
         self.writer.set_header_property("y_min", value[1])
-        self.writer.set_header_property("z_min", value[2]) 
+        self.writer.set_header_property("z_min", value[2])
         return
 
     doc = '''The minimum values of [x, y, z] for the data in the file. 
@@ -1199,7 +1240,8 @@ class HeaderManager(object):
     def get_max(self):
         '''Get the maximum X, Y and Z values as specified in the header. This may be out of date if you have changed data without running
         update_min_max'''
-        return([self.reader.get_header_property(x) for x in ["x_max", "y_max", "z_max"]])
+        return ([self.reader.get_header_property(x) for x in ["x_max", "y_max", "z_max"]])
+
     def set_max(self, value):
         '''Sets the maximum values of [x, y, z] for the data.
         Preferred method is header.update_min_max()
@@ -1213,12 +1255,11 @@ class HeaderManager(object):
     doc = '''The maximum values of [x, y, z] for the data in the file.
     '''
     max = property(get_max, set_max, None, doc)
-    
 
     def get_start_wavefm_data_record(self):
         if not self.version in ("1.3", "1.4"):
             raise util.LaspyException("Waveform data not present in version: " + self.version)
-        return(self.reader.get_header_property("start_wavefm_data_rec"))
+        return (self.reader.get_header_property("start_wavefm_data_rec"))
 
     def set_start_wavefm_data_record(self, value):
         self.assertWriteMode()
@@ -1231,12 +1272,12 @@ class HeaderManager(object):
     def get_start_first_evlr(self):
         if not self.version == "1.4":
             raise util.LaspyException("EVLRs are present explicitly only in version 1.4")
-        return(self.reader.get_header_property("start_first_evlr"))
+        return (self.reader.get_header_property("start_first_evlr"))
 
     def set_start_first_evlr(self, value):
         if not self.version == "1.4":
             raise util.LaspyException("EVLRs are present explicitly only in version 1.4")
-        self.reader.set_header_property("start_first_evlr",value)
+        self.reader.set_header_property("start_first_evlr", value)
         return
 
     start_first_evlr = property(get_start_first_evlr, set_start_first_evlr, None, None)
@@ -1244,33 +1285,33 @@ class HeaderManager(object):
     def get_num_evlrs(self):
         if not self.version == "1.4":
             raise util.LaspyException("EVLRs are present explicitly only in version 1.4")
-        return(self.reader.get_header_property("num_evlrs"))
+        return (self.reader.get_header_property("num_evlrs"))
 
     def set_num_evlrs(self, value):
         if not self.version == "1.4":
             raise util.LaspyException("EVLRs are present explicitly only in version 1.4")
         self.assertWriteMode()
         self.reader.set_header_property("num_evlrs", value)
-    # Encourage users to use len(file.header.vlrs) 
-    #num_evlrs = property(get_num_evlrs, set_num_evlrs, None, None)
+
+    # Encourage users to use len(file.header.vlrs)
+    # num_evlrs = property(get_num_evlrs, set_num_evlrs, None, None)
 
     def get_legacy_point_records_count(self):
         if not self.version == "1.4":
             raise util.LaspyException("Point records count is only denoted as legacy in version 1.4 files.")
-        return(self.reader.get_header_property("legacy_point_records_count"))
+        return (self.reader.get_header_property("legacy_point_records_count"))
 
     def set_legacy_point_records_count(self, value):
         if not self.version == "1.4":
             raise util.LaspyException("Point records count is only denoted as legacy in version 1.4 files.")
         self.reader.set_header_property("legacy_point_records_count", value)
-    
-    legacy_point_records_count = property(get_legacy_point_records_count, set_legacy_point_records_count, None, None)
 
+    legacy_point_records_count = property(get_legacy_point_records_count, set_legacy_point_records_count, None, None)
 
     def get_legacy_point_return_count(self):
         if not self.version == "1.4":
             raise util.LaspyException("Point return count is only denoted as legacy in version 1.4 files.")
-        return(self.reader.get_header_property("legacy_point_return_count"))
+        return (self.reader.get_header_property("legacy_point_return_count"))
 
     def set_legacy_point_return_count(self, value):
         if not self.version == "1.4":
@@ -1282,21 +1323,21 @@ class HeaderManager(object):
     def xml(self):
         '''Return an xml repreentation of header data. (not implemented)'''
         raise NotImplementedError
-    
+
     def etree(self):
         '''Return an etree representation of header data. (not implemented)'''
         raise NotImplementedError
 
     def add_vlr(self, value):
         return
-   
+
     def get_vlrs(self):
-        return(self.reader.get_vlrs())
+        return (self.reader.get_vlrs())
 
     def set_vlrs(self, value):
-       self.assertWriteMode()
-       self.reader.set_vlrs(value)
-       return
+        self.assertWriteMode()
+        self.reader.set_vlrs(value)
+        return
 
     doc = '''Get/set the VLR`'s for the header as a list
         VLR's are completely overwritten, so to append a VLR, first retreive
@@ -1310,7 +1351,8 @@ class HeaderManager(object):
         self.writer.save_vlrs()
 
     def get_evlrs(self):
-        return(self.reader.get_evlrs())
+        return (self.reader.get_evlrs())
+
     def set_evlrs(self, value):
         self.assertWriteMode()
         self.reader.set_evlrs(value)
@@ -1318,10 +1360,9 @@ class HeaderManager(object):
     evlrs = property(get_evlrs, set_evlrs, None, None)
 
     def get_srs(self):
-        raise NotImplementedError 
+        raise NotImplementedError
 
     def set_srs(self, value):
         raise NotImplementedError
 
     srs = property(get_srs, set_srs)
-
