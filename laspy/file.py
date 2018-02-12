@@ -5,6 +5,9 @@ from laspy import header
 import copy
 import os
 
+from laspy.base import compress_data
+
+
 class File(object):
     ''' Base file object in laspy. Provides access to most laspy functionality,
     and holds references to the HeaderManager, Reader, and potentially Writer objects. 
@@ -659,8 +662,11 @@ class File(object):
     extra_bytes = property(get_extra_bytes, set_extra_bytes, None, doc)
 
 
-    def get_raw_bytes(self):
-        return  self._reader.data_provider.get_raw_bytes()
+    def get_raw_bytes(self, compressed=False):
+        b = self._reader.data_provider.get_raw_bytes()
+        if compressed:
+            return compress_data(b)
+        return b
 
     def __iter__(self):
         '''Iterator support (read mode only)

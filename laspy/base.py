@@ -53,6 +53,35 @@ def read_compressed(buf):
     return data
 
 
+def compress_data(buf):
+    import subprocess
+
+    laszip_names = ('laszip', 'laszip.exe', 'laszip-cli', 'laszip-cli.exe')
+
+    for binary in laszip_names:
+        in_path = [os.path.isfile(os.path.join(x, binary))for x in os.environ["PATH"].split(os.pathsep)]
+        if any(in_path):
+            laszip_binary = binary
+            break
+    else:
+        raise(laspy.util.LaspyException("Laszip was not found on the system"))
+
+    prc=subprocess.Popen(
+        [laszip_binary, "-olaz", "-stdout", "-stdin"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=-1
+    )
+    data, stderr = prc.communicate(buf)
+    if prc.returncode != 0:
+        # What about using the logging module instead of prints?
+        print("Unusual return code from {}: {}".format(laszip_binary, prc.returncode))
+        if stderr and len(stderr) < 2048:
+            print(stderr)
+        raise ValueError("Unable to read compressed file!")
+    return data
+
 class FakeMmap(object):
     '''
     An object imitating a memory mapped file,
@@ -64,7 +93,6 @@ class FakeMmap(object):
         else:
             self.view = bytearray(buf)
 
-        # self.view = memoryview(data)
         self.pos = 0
         # numpy needs this, unfortunately
         # Note: this is a memoryview in python3. Does numpy still "need" this?
@@ -75,6 +103,9 @@ class FakeMmap(object):
 
     def __getitem__(self, i):
         return self.view[i]
+
+    def __setitem__(self, key, value):
+        self.view[key] = value
 
     def close(self):
         self.view = None

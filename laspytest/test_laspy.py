@@ -21,6 +21,9 @@ class LasReaderTestCase(unittest.TestCase):
     def setUp(self):
         really_copyfile(self.simple, self.tempfile)
         self.FileObject = File.File(self.tempfile)
+        self.copy_dims_into_self()
+
+    def copy_dims_into_self(self):
         LasFile = self.FileObject
         self.X = list(LasFile.X)
         self.Y = list(LasFile.Y)
@@ -806,6 +809,26 @@ class LasV_14TestCase(unittest.TestCase):
         self.File1.close()
         really_remove(self.tempfile)
         really_remove(self.output_tempfile)
+
+class LazBuffer(LasReaderTestCase):
+    def setUp(self):
+        really_copyfile(self.simple, self.tempfile)
+        with open(self.tempfile, mode='rb') as f:
+            buf = f.read()
+        self.FileObject = File.File(buf, mode="buf")
+        self.copy_dims_into_self()
+
+    def test_iterator_and_slicing(self):
+        pass  # 'Iteration only supported in read mode'
+
+    def test_compression(self):
+        ground_truth_path = os.path.join(os.path.dirname(__file__), 'data', 'simple.laz')
+        with open(ground_truth_path, mode='rb') as f:
+            ground_truth_buf = f.read()
+
+        buf = self.FileObject.get_raw_bytes(compressed=True)
+        self.assertEqual(buf, ground_truth_buf)
+
 
 
 class LasLazReaderTestCase(unittest.TestCase):
