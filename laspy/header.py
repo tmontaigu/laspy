@@ -17,16 +17,6 @@ except NameError:
     string_type = str
 
 
-def leap_year(year):
-    if ((year % 4) != 0):
-        return False
-    elif ((year % 100) != 0):
-        return True
-    elif ((year % 400) != 0):
-        return False
-    return True
-
-
 ## NOTE: set_attr methods are currently not implemented. These methods need
 ## to update the file using reader/mmap. 
 class LaspyHeaderException(Exception):
