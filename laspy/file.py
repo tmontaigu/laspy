@@ -5,7 +5,7 @@ from laspy import header
 import copy
 import os
 
-from laspy.base import compress_data
+from laspy.base import call_laszip
 
 
 class File(object):
@@ -665,7 +665,7 @@ class File(object):
     def get_raw_bytes(self, compressed=False):
         b = self._reader.data_provider.get_raw_bytes()
         if compressed:
-            return compress_data(b)
+            return call_laszip(b, action='compress')
         return b
 
     def __iter__(self):
