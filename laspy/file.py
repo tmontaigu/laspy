@@ -51,10 +51,10 @@ class File(object):
         >>> f2.points = points
         >>> f2.close()
         '''
-        if filename is not None:
+        if filename is not None and mode != 'buf':
             self.filename = os.path.abspath(filename)
         else:
-            self.filename = None
+            self.filename = filename
         self._header = header
         self._vlrs = vlrs
         self._evlrs = evlrs
@@ -126,7 +126,16 @@ class File(object):
             if self._writer.extra_dimensions != []:
                 for dimension in self._writer.extra_dimensions:
                     dimname = dimension.name.decode().replace("\x00", "").replace(" ", "_").lower()
-                    self.addProperty(dimname) 
+                    self.addProperty(dimname)
+        elif self._mode == "buf":
+            self._writer = base.Writer(self.filename, self._mode)
+            self._reader = self._writer
+            self._header = self._reader.get_header()
+            if self._writer.extra_dimensions != []:
+                for dimension in self._writer.extra_dimensions:
+                    dimname = dimension.name.decode().replace("\x00", "").replace(" ", "_").lower()
+                    self.addProperty(dimname)
+
 
         elif self._mode == 'w+':
             raise NotImplementedError
@@ -648,6 +657,11 @@ class File(object):
             This dimension is only assignable for files in write mode which were instantiated with the appropriate
             data_record_length from the header.'''
     extra_bytes = property(get_extra_bytes, set_extra_bytes, None, doc)
+
+
+    def get_raw_bytes(self):
+        self._reader.data_provider._mmap.seek(0)
+        return self._reader.data_provider._mmap.read(-1)
         
     def __iter__(self):
         '''Iterator support (read mode only)

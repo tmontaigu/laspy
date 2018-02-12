@@ -7,6 +7,7 @@ from types import GeneratorType
 import numpy as np
 import copy
 
+import io
 
 # Not used right now - but could be a handy place to centralize file modes
 FILE_MODES = ["r-", "r", "rw", "w"]
@@ -22,11 +23,10 @@ except NameError:
     buffer = memoryview
 
 
-def read_compressed(filename):
+def read_compressed(buf):
     import subprocess
 
     laszip_names = ('laszip', 'laszip.exe', 'laszip-cli', 'laszip-cli.exe')
-    laszip_binary = ''
 
     for binary in laszip_names:
         in_path = [os.path.isfile(os.path.join(x, binary))for x in os.environ["PATH"].split(os.pathsep)]
@@ -36,13 +36,18 @@ def read_compressed(filename):
     else:
         raise(laspy.util.LaspyException("Laszip was not found on the system"))
 
-    prc=subprocess.Popen([laszip_binary, "-olas", "-stdout", "-i", filename],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
-    data, stderr=prc.communicate()
+    prc=subprocess.Popen(
+        [laszip_binary, "-olas", "-stdout", "-stdin"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=-1
+    )
+    data, stderr = prc.communicate(buf)
     if prc.returncode != 0:
         # What about using the logging module instead of prints?
-        print("Unusual return code from %s: %d" % (laszip_binary, prc.returncode))
-        if stderr and len(stderr)<2048:
+        print("Unusual return code from {}: {}".format(laszip_binary, prc.returncode))
+        if stderr and len(stderr) < 2048:
             print(stderr)
         raise ValueError("Unable to read compressed file!")
     return data
@@ -53,13 +58,17 @@ class FakeMmap(object):
     An object imitating a memory mapped file,
     constructed from 'buffer like' data.
     '''
-    def __init__(self, filename, pos=0):
-        data = read_compressed(filename)
-        self.view = memoryview(data)
-        self.pos = pos
+    def __init__(self, buf, compressed=False):
+        if compressed:
+            self.view = bytearray(read_compressed(buf))
+        else:
+            self.view = bytearray(buf)
+
+        # self.view = memoryview(data)
+        self.pos = 0
         # numpy needs this, unfortunately
         # Note: this is a memoryview in python3. Does numpy still "need" this?
-        self.__buffer__ = buffer(data)
+        self.__buffer__ = self.view
 
     def __len__(self):
         return len(self.view)
@@ -80,9 +89,11 @@ class FakeMmap(object):
             self.pos += nbytes
 
     def read(self, nbytes):
+        if nbytes == -1:
+            return bytes(self.view)
         out = self.view[self.pos:self.pos+nbytes]
         self.pos += nbytes
-        return(out)
+        return out
 
     def tell(self):
         return self.pos
@@ -90,6 +101,22 @@ class FakeMmap(object):
     def size(self):
         return len(self.view)
 
+    @classmethod
+    def from_filename(cls, filename, compressed=False):
+        with open(filename, mode='rb') as f:
+            buf = f.read()
+
+        return cls(buf, compressed=compressed)
+
+
+def is_compressed(stream):
+    stream.seek(104)
+    fmt = int(struct.unpack("<B", stream.read(1))[0])
+    compression_bit_7 = (fmt & 0x80) >> 7
+    compression_bit_6 = (fmt & 0x40) >> 6
+    if not compression_bit_6 and compression_bit_7:
+        return True
+    return False
 
 class DataProvider():
     '''Provides access to the file object, the memory map, and the numpy point map.'''
@@ -106,24 +133,22 @@ class DataProvider():
         # Figure out if this file is compressed
         if self.mode in ("w"):
             self.compressed = False
+        elif self.mode == "buf":
+            with io.BytesIO(self.filename) as tmpstream:
+                self.compressed = is_compressed(tmpstream)
         else:
             try:
-                tmpref = open(filename, "rb")
-                tmpref.seek(104)
-                fmt = int(struct.unpack("<B", tmpref.read(1))[0])
-                compression_bit_7 = (fmt & 0x80) >> 7
-                compression_bit_6 = (fmt & 0x40) >> 6
-                if (not compression_bit_6 and compression_bit_7):
-                    self.compressed = True
-                else:
-                    self.compressed = False
-                tmpref.close()
+                with open(filename, "rb") as tmpref:
+                    self.compressed = is_compressed(tmpref)
             except Exception as e:
-                raise laspy.util.LaspyException("Error determining compression: "
-                        + str(e))
+                raise laspy.util.LaspyException("Error determining compression: {}".format(e))
 
     def open(self, mode):
         '''Open the file, catch simple problems.'''
+        if self.mode == "buf":
+            self.fileref = io.BytesIO(self.filename)
+            return
+
         if (not self.compressed) or self.mode == "r-":
             try:
                 self.fileref = open(self.filename, mode)
@@ -199,11 +224,14 @@ class DataProvider():
         if self.fileref == False and not self.compressed:
             raise laspy.util.LaspyException("File not opened.")
         try:
+
             if self.mode in ("r", "r-"):
                 if self.compressed and self.mode != "r-":
-                    self._mmap=FakeMmap(self.filename)
+                    self._mmap = FakeMmap.from_filename(self.filename, compressed=self.compressed)
                 else:
                     self._mmap = mmap.mmap(self.fileref.fileno(), 0, access = mmap.ACCESS_READ)
+            elif self.mode == "buf":
+                self._mmap = FakeMmap(self.filename, compressed=self.compressed)
             elif self.mode in ("w", "rw"):
                 self._mmap = mmap.mmap(self.fileref.fileno(), 0, access = mmap.ACCESS_WRITE)
             else:
@@ -272,7 +300,7 @@ class FileManager(object):
         if self.mode in ("r", "r-"):
             self.setup_read_write(vlrs,evlrs, read_only=True)
             return
-        elif self.mode == "rw":
+        elif self.mode in ("rw", "buf"):
             self.setup_read_write(vlrs, evlrs, read_only=False)
             return
         elif self.mode == "w":
