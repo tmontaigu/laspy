@@ -660,9 +660,8 @@ class File(object):
 
 
     def get_raw_bytes(self):
-        self._reader.data_provider._mmap.seek(0)
-        return self._reader.data_provider._mmap.read(-1)
-        
+        return  self._reader.data_provider.get_raw_bytes()
+
     def __iter__(self):
         '''Iterator support (read mode only)
 

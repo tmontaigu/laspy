@@ -281,6 +281,10 @@ class DataProvider():
             raise laspy.util.LaspyException("File not mapped")
         return(self._mmap.size())
 
+    def get_raw_bytes(self):
+        self._mmap.seek(0)
+        return self._mmap.read(-1)
+
 class FileManager(object):
     '''Superclass of Reader and Writer, provides most of the data manipulation functionality in laspy.'''
     def __init__(self,filename, mode, header=False, vlrs=False, evlrs=False):
