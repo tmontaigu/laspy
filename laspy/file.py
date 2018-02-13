@@ -54,7 +54,7 @@ class File(object):
         >>> f2.points = points
         >>> f2.close()
         '''
-        if filename is not None and mode != 'buf':
+        if filename is not None and mode != 's':
             self.filename = os.path.abspath(filename)
         else:
             self.filename = filename
@@ -121,7 +121,7 @@ class File(object):
                                        vlrs=self._vlrs, evlrs=self._evlrs)
             self._reader = self._writer
             self.add_extra_dimensions(self._writer.extra_dimensions)
-        elif self._mode == "buf":
+        elif self._mode == "s":
             self._writer = base.Writer(self.filename, self._mode)
             self._reader = self._writer
             self._header = self._reader.get_header()

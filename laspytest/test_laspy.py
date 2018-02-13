@@ -814,8 +814,7 @@ class LazBuffer(LasReaderTestCase):
     def setUp(self):
         really_copyfile(self.simple, self.tempfile)
         with open(self.tempfile, mode='rb') as f:
-            buf = f.read()
-        self.FileObject = File.File(buf, mode="buf")
+            self.FileObject = File.File(f, mode="s")
         self.copy_dims_into_self()
 
     def test_iterator_and_slicing(self):
@@ -826,14 +825,18 @@ class LasBufferV13(LasV_13TestCase):
     def setUp(self):
         really_copyfile(self.simple, self.tempfile)
         with open(self.tempfile, mode='rb') as f:
-            self.File1 = File.File(f.read(), mode='buf')
+            self.File1 = File.File(f, mode='s')
 
 
 class LasBufferV14(LasV_14TestCase):
     def setUp(self):
         really_copyfile(self.simple, self.tempfile)
+        # just to show reading bytes
         with open(self.tempfile, mode='rb') as f:
-            self.File1 = File.File(f.read(), mode='buf')
+            buf = f.read()
+
+        with io.BytesIO(buf) as stream:
+            self.File1 = File.File(stream, mode='s')
 
 
 class LasLazReaderTestCase(unittest.TestCase):

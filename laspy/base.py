@@ -62,9 +62,9 @@ class FakeMmap(object):
 
     def __init__(self, buf, compressed=False):
         if compressed:
-            self.view = bytearray(call_laszip(buf, action="decompress"))
+            self.view = bytearray(call_laszip(buf.read(), action="decompress"))
         else:
-            self.view = bytearray(buf)
+            self.view = bytearray(buf.read())
 
         self.pos = 0
         # numpy needs this, unfortunately
@@ -108,9 +108,7 @@ class FakeMmap(object):
     @classmethod
     def from_filename(cls, filename, compressed=False):
         with open(filename, mode='rb') as f:
-            buf = f.read()
-
-        return cls(buf, compressed=compressed)
+            return cls(f, compressed=compressed)
 
 
 def is_compressed(stream):
@@ -138,9 +136,9 @@ class DataProvider():
         # Figure out if this file is compressed
         if self.mode in ("w"):
             self.compressed = False
-        elif self.mode == "buf":
-            with io.BytesIO(self.filename) as tmpstream:
-                self.compressed = is_compressed(tmpstream)
+        elif self.mode == 's':
+            self.fileref = filename
+            self.compressed = is_compressed(self.fileref)
         else:
             try:
                 with open(filename, "rb") as tmpref:
@@ -150,15 +148,12 @@ class DataProvider():
 
     def open(self, mode):
         '''Open the file, catch simple problems.'''
-        if self.mode == "buf":
-            self.fileref = io.BytesIO(self.filename)
+        if self.mode in ("s"):
+            self.fileref.seek(0)
             return
 
         if (not self.compressed) or self.mode == "r-":
-            try:
-                self.fileref = open(self.filename, mode)
-            except(Exception):
-                raise laspy.util.LaspyException("Error opening file. Do you have the right permissions?")
+            self.fileref = open(self.filename, mode)
 
     def get_point_map(self, informat):
         '''Get point map is used to build and return a numpy frombuffer view of the mmapped data,
@@ -235,7 +230,7 @@ class DataProvider():
                     self._mmap = FakeMmap.from_filename(self.filename, compressed=self.compressed)
                 else:
                     self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=mmap.ACCESS_READ)
-            elif self.mode == "buf":
+            elif self.mode == "s":
                 self._mmap = FakeMmap(self.filename, compressed=self.compressed)
             elif self.mode in ("w", "rw"):
                 self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=mmap.ACCESS_WRITE)
@@ -311,7 +306,7 @@ class FileManager(object):
         if self.mode in ("r", "r-"):
             self.setup_read_write(vlrs, evlrs, read_only=True)
             return
-        elif self.mode in ("rw", "buf"):
+        elif self.mode in ("rw", "s"):
             self.setup_read_write(vlrs, evlrs, read_only=False)
             return
         elif self.mode == "w":
