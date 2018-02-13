@@ -821,14 +821,19 @@ class LazBuffer(LasReaderTestCase):
     def test_iterator_and_slicing(self):
         pass  # 'Iteration only supported in read mode'
 
-    def test_compression(self):
-        ground_truth_path = os.path.join(os.path.dirname(__file__), 'data', 'simple.laz')
-        with open(ground_truth_path, mode='rb') as f:
-            ground_truth_buf = f.read()
 
-        buf = self.FileObject.get_raw_bytes(compressed=True)
-        self.assertEqual(buf, ground_truth_buf)
+class LasBufferV13(LasV_13TestCase):
+    def setUp(self):
+        really_copyfile(self.simple, self.tempfile)
+        with open(self.tempfile, mode='rb') as f:
+            self.File1 = File.File(f.read(), mode='buf')
 
+
+class LasBufferV14(LasV_14TestCase):
+    def setUp(self):
+        really_copyfile(self.simple, self.tempfile)
+        with open(self.tempfile, mode='rb') as f:
+            self.File1 = File.File(f.read(), mode='buf')
 
 
 class LasLazReaderTestCase(unittest.TestCase):
