@@ -100,7 +100,7 @@ class DataProvider:
         self.fileref = False
         self._mmap = False
         self._pmap = False
-        self._evlrmap = False
+        self.pointfmt = None
         self.manager = manager
         self.mode = manager.mode
         # Figure out if this file is compressed
@@ -137,15 +137,13 @@ class DataProvider:
         extra_bytes VLR record."""
         if type(self._mmap) == bool:
             self.map()
-        self.pointfmt = np.dtype([("point", zip([x.name for x in informat.specs],
-                                                [x.np_fmt for x in informat.specs]))])
-        if not self.manager.header.version in ("1.3", "1.4"):
-            _pmap = np.frombuffer(self._mmap, self.pointfmt,
-                                  offset=self.manager.header.data_offset)
-        else:
-            _pmap = np.frombuffer(self._mmap, self.pointfmt,
-                                  offset=self.manager.header.data_offset,
-                                  count=self.manager.header.point_records_count)
+        self.pointfmt = np.dtype([("point", [(str(x.name), x.np_fmt) for x in informat.specs])])
+        _pmap = np.frombuffer(
+            self._mmap,
+            self.pointfmt,
+            offset=self.manager.header.data_offset,
+            count=self.manager.header.point_records_count
+        )
         return _pmap
 
     def point_map(self):
@@ -156,11 +154,8 @@ class DataProvider:
         if self.mode == "r-":
             # Do not construct the point map in case
             return
-        self.pointfmt = np.dtype([("point", [(str(x.name), x.np_fmt) for x in self.manager.point_format.specs])])
-
+        self._pmap = self.get_point_map(self.manager.point_format)
         if self.manager.header.version not in ("1.3", "1.4"):
-            self._pmap = np.frombuffer(self._mmap, self.pointfmt,
-                                       offset=self.manager.header.data_offset)
             if self.manager.header.point_records_count != len(self._pmap):
                 if self.manager.mode == "r":
                     raise laspy.util.LaspyException("""Invalid Point Records Count Information Encountered in Header.
@@ -172,10 +167,6 @@ class DataProvider:
                             Attempting to correct mismatch.""") % (
                     self.manager.header.point_records_count, len(self._pmap))
                     self.manager.header.point_records_count = len(self._pmap)
-        else:
-            self._pmap = np.frombuffer(self._mmap, self.pointfmt,
-                                       offset=self.manager.header.data_offset,
-                                       count=self.manager.header.point_records_count)
 
     def close(self, flush=True):
         """Close the data provider and flush changes if _mmap and _pmap exist."""
