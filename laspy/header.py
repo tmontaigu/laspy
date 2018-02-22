@@ -344,7 +344,7 @@ class EVLR(ParseableVLR):
         self.record_id = reader.read_words("record_id", "evlr")
         self.rec_len_after_header = reader.read_words("rec_len_after_header", "evlr")
         self.description = "".join(reader.read_words("description", "evlr"))
-        self.VLR_body = reader.read(self.rec_len_after_header)
+        self.VLR_body = reader.data_provider._mmap.read(self.rec_len_after_header)
         if "LASF_Spec" in self.user_id and self.record_id == 4:
             self.setup_extra_bytes_spec(self.VLR_body)
 
@@ -438,7 +438,7 @@ class VLR(ParseableVLR):
         self.record_id = reader.read_words("record_id")
         self.rec_len_after_header = reader.read_words("rec_len_after_header")
         self.description = "".join(w for w in reader.read_words("description"))
-        self.VLR_body = reader.read(self.rec_len_after_header)
+        self.VLR_body = reader.data_provider._mmap.read(self.rec_len_after_header)
         if "LASF_Spec" in self.user_id and self.record_id == 4:
             self.setup_extra_bytes_spec(self.VLR_body)
         ### LOGICAL CONTENT ###
@@ -599,7 +599,7 @@ class HeaderManager(object):
 
     def read_words(self, offs, fmt,num, length, pack):
         '''Read binary data'''
-        self.reader.seek(offs,rel=False)
+        self.reader.data_provider._mmap(offs,rel=False)
         out = self.reader._read_words(fmt, num, length)
         if pack:
             return("".join(out))
@@ -725,8 +725,8 @@ class HeaderManager(object):
         p1 = self.reader.get_raw_header_property("proj_id_1")
         p2 = self.reader.get_raw_header_property("proj_id_2")
         p3 = self.reader.get_raw_header_property("proj_id_3")
-        p4 = self.reader.get_raw_header_property("proj_id_4") 
-        return(uuid.UUID(bytes =p1+p2+p3+p4))
+        p4 = self.reader.get_raw_header_property("proj_id_4")
+        return(uuid.UUID(bytes= p1 + p2 + p3 + p4))
  
     doc = '''ProjectID for the file.  \
         laspy does not currently support setting this value from Python, as
