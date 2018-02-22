@@ -83,6 +83,8 @@ class FakeMmap(object):
         self.view[key] = value
 
     def close(self):
+        self.view = bytearray(b'')
+        self.pos = 0
         # self.view = None
         pass
 
@@ -103,22 +105,19 @@ class FakeMmap(object):
         return out
 
     def write(self, b):
-        # self.view[self.pos: self.pos + len(b)] = b
-        # self.pos += len(b)
-        print('before write', len(self.view), 'want to write:', len(b))
-        if self.pos >= len(self.view):
+        if self.pos == len(self.view):
             self.view += b
-            self.pos += len(b)
-        print('after write', len(self.view))
+        else:
+            len_to_pad = len(b) - (len(self.view) - self.pos)
+            self.view += b'\x00' * len_to_pad
+            self.view[self.pos: self.pos + len(b)] = b
+        self.pos += len(b)
 
     def tell(self):
         return self.pos
 
     def size(self):
         return len(self.view)
-
-
-
 
 
 def seek_is_compressed(stream):
@@ -140,8 +139,11 @@ class DataProvider:
         self.mode = mode
         # Figure out if this file is compressed
 
-    def open(self, mode):
-        self.fileref = open(self.filename, mode)
+    def open(self):
+        if self.mode == 'w':
+            self.fileref = io.BytesIO()
+        else:
+            self.fileref = open(self.filename, 'r+b')
         self.map()
 
     def get_point_map(self, informat, header):
@@ -184,13 +186,13 @@ class DataProvider:
         return pmap
 
     def close(self, flush=True):
-        """Close the data provider and flush changes if _mmap and _pmap exist."""
-        if flush and self._mmap is not None:
-            self._mmap.flush()
-            self._mmap.close()
-        # self._mmap = None
-        if self.fileref:
-            self.fileref.close()
+        if self.mode == 'w':
+            with open(self.filename, mode='wb') as out_file:
+                out_file.write(bytes(self._mmap.view))
+        else:
+            self.fileref.seek(0)
+            self.fileref.write(bytes(self._mmap.view))
+        self.fileref.close()
 
     def map(self):
         """Memory map the file"""
@@ -201,17 +203,6 @@ class DataProvider:
             self._mmap = FakeMmap(self.fileref, is_compressed)
         else:
             self._mmap = FakeMmap(self.fileref, False)
-            # access_right = mmap.ACCESS_READ if "w" not in self.mode else mmap.ACCESS_WRITE
-            # self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=access_right)
-
-    def remap(self, flush=True):
-        """Re-map the file. Flush changes, close, open, and map. Optionally point map."""
-        if flush and self._mmap is not None:
-            self._mmap.flush()
-        self._mmap.seek(0)
-        # self.close(flush=False)
-        # self.open("r+b")
-        # self.map()
 
 
 class FileManager(object):
@@ -250,7 +241,7 @@ class FileManager(object):
     def setup_read_write(self):
         open_mode = "r+b"
         self._header_current = True
-        self.data_provider.open(open_mode)
+        self.data_provider.open()
         self.data_provider.map()
         self.header_format = laspy.util.Format("h" + self.grab_file_version())
         self.header = laspy.header.HeaderManager(header=laspy.header.Header(self.grab_file_version()), reader=self)
@@ -283,7 +274,6 @@ class FileManager(object):
             new_pt_fmt = laspy.util.Format(
                 self.point_format.fmt, extradims=self.extra_dimensions)
             self.point_format = new_pt_fmt
-            self.data_provider.remap()
         self.pmap = self.data_provider.point_map(self.point_format, self.header)
 
     def setup_write(self, header, vlrs, evlrs):
@@ -292,14 +282,13 @@ class FileManager(object):
             raise laspy.util.LaspyException("Write mode requires a valid header object.")
         # No file to store data yet.
         self.has_point_records = False
-        self.data_provider.open("w+b")
+        self.data_provider.open()
         self.header_format = header.format
         self._header = header
         self.header = laspy.header.HeaderManager(header=header, reader=self)
         self.initialize_file_padding(vlrs)
 
         # We have a file to store data now.
-        self.data_provider.remap()
         self.header.flush()
 
         self.correct_rec_len()
@@ -747,7 +736,6 @@ class Writer(Reader):
         if not all(x.isEVLR for x in value):
             raise laspy.util.LaspyException(
                 "set_evlrs requires an iterable object composed of :obj:`laspy.header.EVLR` objects.")
-        # elif self.mode in ("rw", "w"):
         if self.header.version == "1.3":
             old_offset = self.header.start_wavefm_data_rec
         elif self.header.version == "1.4":
@@ -775,16 +763,10 @@ class Writer(Reader):
 
         self.data_provider._mmap.seek(0)
         dat_part_1 = self.data_provider._mmap.read(old_offset)
-        # Manually Close:
-        # self.data_provider.close(flush=False)
-        # self.data_provider.open("w+b")
         self.data_provider._mmap.seek(0)
         self.data_provider._mmap.write(dat_part_1)
         total_evlrs = sum(len(x) for x in value)
         self.data_provider._mmap.write(b"\x00" * total_evlrs)
-        # self.data_provider._mmap.close()
-        # self.data_provider.open("r+b")
-        # self.data_provider.map()
         self.data_provider._mmap.seek(old_offset)
 
         for evlr in value:
@@ -793,11 +775,6 @@ class Writer(Reader):
         if self.has_point_records:
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
         self.populate_evlrs()
-
-        # else:
-        #     raise (laspy.util.LaspyException("set_evlrs requires the file to be opened in a " +
-        #                                      "write mode, and must be performed before point information is provided." +
-        #                                      "Try closing the file and opening it in rw mode. "))
 
     def save_vlrs(self):
         self.set_vlrs(self.vlrs)
@@ -815,43 +792,29 @@ class Writer(Reader):
             new_offset = current_padding + self.header.header_size + sum([len(x) for x in value])
             self.set_header_property("data_offset", new_offset)
             self.set_header_property("num_variable_len_recs", len(value))
-            self.data_provider.fileref.seek(0)
-            dat_part_1 = self.data_provider.fileref.read(self.header.header_size)
-            self.data_provider.fileref.seek(old_offset, 0)
-            dat_part_2 = self.data_provider.fileref.read(current_size - old_offset)
-            # Manually Close:
-            self.data_provider.close(flush=False)
-            self.data_provider.open("w+b")
-            self.data_provider.fileref.write(dat_part_1)
+            self.data_provider._mmap.seek(0)
+            dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
+            self.data_provider._mmap.seek(old_offset, 0)
+            dat_part_2 = self.data_provider._mmap.read(current_size - old_offset)
+            self.data_provider._mmap.write(dat_part_1)
             for vlr in value:
                 byte_string = vlr.to_byte_string()
-                self.data_provider.fileref.write(byte_string)
-            self.data_provider.fileref.write(b"\x00" * current_padding)
-            self.data_provider.fileref.write(dat_part_2)
-            self.data_provider.fileref.close()
-            self.data_provider.open("r+b")
-            self.data_provider.map()
+                self.data_provider._mmap.write(byte_string)
+            self.data_provider._mmap.write(b"\x00" * current_padding)
+            self.data_provider._mmap.write(dat_part_2)
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
             self.populate_vlrs()
         elif self.mode == "w" and not self.has_point_records:
 
             self.set_header_property("num_variable_len_recs", len(value))
             if self.data_provider._mmap.size() < self.header.header_size + sum([len(x) for x in value]):
-                self.data_provider.fileref.seek(0, 0)
-                dat_part_1 = self.data_provider.fileref.read(self.header.header_size)
-                # Manually Close:
-                self.data_provider.close(flush=False)
-                self.data_provider.open("w+b")
-                self.data_provider.fileref.write(dat_part_1)
+                self.data_provider._mmap.seek(0)
+                dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
+                self.data_provider._mmap.write(dat_part_1)
                 for vlr in value:
                     byte_string = vlr.to_byte_string()
-                    self.data_provider.fileref.write(byte_string)
-
-                self.data_provider.fileref.close()
-                self.data_provider.open("r+b")
-
-                self.data_provider.remap()
-                new_offset = self.header.header_size + sum([len(x) for x in value])
+                    self.data_provider._mmap.write(byte_string)
+                new_offset = self.header.header_size + sum(len(x) for x in value)
                 self.set_header_property("data_offset", new_offset)
 
             self.data_provider._mmap.seek(self.header.header_size)
@@ -865,22 +828,16 @@ class Writer(Reader):
             new_offset = current_padding + self.header.header_size + sum([len(x) for x in value])
             self.set_header_property("data_offset", new_offset)
             self.set_header_property("num_variable_len_recs", len(value))
-            self.data_provider.fileref.seek(0, 0)
-            dat_part_1 = self.data_provider.fileref.read(self.header.header_size)
-            self.data_provider.fileref.seek(old_offset, 0)
-            dat_part_2 = self.data_provider.fileref.read(current_size - old_offset)
-            # Manually Close:
-            self.data_provider.close(flush=False)
-            self.data_provider.open("w+b")
-            self.data_provider.fileref.write(dat_part_1)
+            self.data_provider._mmap.seek(0)
+            dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
+            self.data_provider._mmap.seek(old_offset)
+            dat_part_2 = self.data_provider._mmap.read(current_size - old_offset)
+            self.data_provider._mmap.write(dat_part_1)
             for vlr in value:
                 byte_string = vlr.to_byte_string()
-                self.data_provider.fileref.write(byte_string)
-            self.data_provider.fileref.write(b"\x00" * current_padding)
-            self.data_provider.fileref.write(dat_part_2)
-            self.data_provider.fileref.close()
-            self.data_provider.open("r+b")
-            self.data_provider.map()
+                self.data_provider._mmap.write(byte_string)
+            self.data_provider._mmap.write(b"\x00" * current_padding)
+            self.data_provider._mmap.write(dat_part_2)
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
             self.populate_vlrs()
 
@@ -890,36 +847,26 @@ class Writer(Reader):
             raise laspy.util.LaspyException("New Padding Value Overwrites VLRs")
         if self.mode == "w":
             if not self.has_point_records:
-                self.data_provider.fileref.seek(self.vlr_stop, 0)
-                self.data_provider.fileref.write(b"\x00" * value)
-                self.data_provider.remap()
+                self.data_provider._mmap.seek(self.vlr_stop)
+                self.data_provider._mmap.write(b"\x00" * value)
+                self.data_provider._mmap.seek(0)
                 return
             else:
                 raise laspy.util.LaspyException(
                     "Laspy does not yet support assignment of EVLRs for files which already contain point records.")
         elif self.mode == "rw":
             old_offset = self.header.data_offset
-            self.set_header_property("data_offset",
-                                     self.vlr_stop + value)
-            # self.header.data_offset = self.vlr_stop + value
-            self.data_provider._mmap.flush()
+            self.set_header_property("data_offset", self.vlr_stop + value)
             self.data_provider._mmap.seek(0)
             dat_part_1 = self.data_provider._mmap.read(self.vlr_stop)
             self.data_provider._mmap.seek(old_offset)
             dat_part_2 = self.data_provider._mmap.read(len(self.data_provider._mmap) - old_offset)
-            self.data_provider.close()
-            self.data_provider.open("w+b")
-            self.data_provider.fileref.write(dat_part_1)
-            self.data_provider.fileref.write(b"\x00" * value)
-            self.data_provider.fileref.write(dat_part_2)
-            self.data_provider.close()
-            self.__init__(self.data_provider.filename, self.mode)
+            self.data_provider._mmap.write(dat_part_1)
+            self.data_provider._mmap.write(b"\x00" * value)
+            self.data_provider._mmap.write(dat_part_2)
             return len(self.data_provider._mmap)
-        elif self.mode == "r+":
-            pass
         else:
             raise (laspy.util.LaspyException("Must be in write mode to change padding."))
-        return len(self.data_provider._mmap)
 
     def pad_file_for_point_recs(self, num_recs):
         """Pad the file with null bytes out to a calculated length based on
@@ -930,27 +877,17 @@ class Writer(Reader):
         self.header.point_records_count = num_recs
         if self.evlrs in [False, []]:
             old_size = self.header.data_offset
-            self.data_provider._mmap.flush()
             self.data_provider._mmap.seek(old_size)
-            print('old_size', old_size)
-            print('tell:', self.data_provider._mmap.tell())
             self.data_provider._mmap.write(b"\x00" * bytes_to_pad)
-            print('pad', bytes_to_pad)
-            print(len(self.data_provider._mmap.view))
-            # self.data_provider.fileref.flush()
-            self.data_provider.remap(flush=False)
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
             self.padded = num_recs
         else:
-            d1 = self.data_provider._mmap[0:self.header.data_offset]
-            d2 = self.data_provider._mmap[self.header.data_offset:self.data_provider._mmap.size()]
-            self.data_provider.close()
-            self.data_provider.open("w+b")
+            d1 = self.data_provider._mmap[:self.header.data_offset]
+            vlr_data = self.data_provider._mmap[self.header.data_offset:]
+            print('POINTDATA', vlr_data)
             self.data_provider._mmap.write(d1)
             self.data_provider._mmap.write(b"\x00" * bytes_to_pad)
-            self.data_provider._mmap.write(d2)
-            self.data_provider.close()
-            self.data_provider.remap()
+            self.data_provider._mmap.write(vlr_data)
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
             self.header.start_wavefm_data_rec += bytes_to_pad
             if self.header.version == "1.4":
@@ -1052,8 +989,7 @@ class Writer(Reader):
             self.has_point_records = True
             self.pad_file_for_point_recs(len(points))
         if isinstance(points[0], laspy.util.Point):
-            points_data = b"".join(x.pack() for x in points)
-            self.data_provider._mmap[self.header.data_offset:self.data_provider._mmap.size()] = points
+            self.data_provider._mmap[self.header.data_offset:] = points
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
         else:
             self.pmap[:] = points[:]
@@ -1365,7 +1301,7 @@ class Writer(Reader):
         self.set_dimension("blue", blue)
 
     def set_nir(self, value):
-        self.get_dimension("nir", value)
+        self.set_dimension("nir", value)
 
     def set_wave_packet_desc_index(self, idx):
         """Wrapper for set_dimension("wave_packet_desc_index") This is not currently functional,
