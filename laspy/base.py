@@ -231,7 +231,6 @@ class FileManager(object):
         else:
             self.setup_read_write(vlrs, evlrs, read_only="w" not in mode)
 
-
     def close(self):
 
         """Help the garbage collector by deleting some of the circular references"""
@@ -356,7 +355,7 @@ class FileManager(object):
 
     def packed_str(self, string):
         """Take a little endian binary string, and convert it to a python int."""
-        return sum([int(string[idx]) * (2 ** idx) for idx in xrange(len(string))])
+        return sum(int(string[idx]) * (2 ** idx) for idx in xrange(len(string)))
 
     def binary_str(self, N, zerolen=8):
         """Take a python integer and create a binary string padded to len zerolen."""
@@ -372,11 +371,6 @@ class FileManager(object):
     def read(self, bytes):
         """Wrapper for mmap.mmap read function"""
         return self.data_provider._mmap.read(bytes)
-
-    def reset(self):
-        """Refresh the mmap and fileref"""
-        self.data_provier.remap()
-        return
 
     def seek(self, bytes, rel=True):
         """Wrapper for mmap.mmap seek functions, make option rel explicit"""
@@ -425,7 +419,7 @@ class FileManager(object):
     def _pack_words(self, fmt, num, val):
         if num == 1:
             return struct.pack(fmt, val)
-        outData = "".join([struct.pack(fmt, val[i]) for i in xrange(num)])
+        outData = b''.join(struct.pack(fmt, val[i]) for i in xrange(num))
         return outData
 
     def grab_file_version(self):
@@ -479,7 +473,6 @@ class FileManager(object):
                 raise laspy.util.LaspyException("Error, Calculated Header Data "
                                                 "Overlaps The Point Records!")
         self.vlr_stop = self.data_provider._mmap.tell()
-        return
 
     def get_vlrs(self):
         """Populate and return list of :obj:`laspy.header.VLR` objects`."""
@@ -488,9 +481,6 @@ class FileManager(object):
         except:
             self.populate_vlrs()
             return self.vlrs
-
-    def push_vlrs(self):
-        self.set_vlrs(self.vlrs)
 
     def get_evlrs(self):
         try:
@@ -508,12 +498,6 @@ class FileManager(object):
         """calculate the number of point records"""
         return self.get_header_property("point_records_count")
 
-    def set_input_srs(self):
-        pass
-
-    def set_output_srsS(self):
-        pass
-
     def get_raw_point_index(self, index):
         """Return the byte index of point number index"""
         return (self.header.data_offset +
@@ -526,11 +510,6 @@ class FileManager(object):
         return self.pmap
 
     def get_raw_point(self, index):
-        """Return the raw bytestring associated with point of number index"""
-        # start = (self.header.data_offset +
-        #    index * self.header.data_record_length)
-        # return(self.data_provider._mmap[start : start +
-        #     self.header.data_record_length])
         return self.pmap[index][0].tostring()
 
     # self, reader, startIdx ,version
@@ -552,7 +531,6 @@ class FileManager(object):
 
     def build_point_refs(self):
         """Build array of point offsets """
-        # Is this really needed?
         pts = int(self.get_pointrecordscount())
         length = int(self.header.data_record_length)
         offs = int(self.header.data_offset)
@@ -590,31 +568,31 @@ class FileManager(object):
 
     def _get_raw_datum(self, rec_offs, spec):
         """return raw bytes associated with non dimension field (VLR/Header)"""
-        return (self.data_provider._mmap[(rec_offs + spec.offs):(rec_offs + spec.offs
-                                                                 + spec.num * spec.length)])
+        start = rec_offs + spec.offs
+        return self.data_provider._mmap[start: start + (spec.num * spec.length)]
 
     def _get_datum(self, rec_offs, spec):
-        """Return unpacked data assocaited with non dimension field (VLR/Header)"""
-        data = self._get_raw_datum(rec_offs, spec)
+        """Return unpacked data associated with non dimension field (VLR/Header)"""
+        packed_data = self._get_raw_datum(rec_offs, spec)
         if spec.num == 1:
-            return struct.unpack(spec.fmt, data)[0]
-        unpacked = map(lambda x: struct.unpack(spec.fmt,
-                                               data[x * spec.length:(x + 1) * spec.length])[0], xrange(spec.num))
+            return struct.unpack(spec.fmt, packed_data)[0]
+        data = (packed_data[i * spec.length: (i + 1) * spec.length] for i in xrange(spec.num))
+        unpacked = (struct.unpack(spec.fmt, buf)[0] for buf in data)
+
+
         if spec.pack:
-            # return("".join([str(x[0]) for x in unpacked]))
             if spec.fmt == '<s':
                 s = ''.join(x.decode('ascii') for x in unpacked)
                 return s
             else:
-                return "".join([str(x[0]) for x in unpacked])
+                return "".join(str(x[0]) for x in unpacked)
         else:
-            unpacked = list(unpacked)  # evaluate the map in python3
+            unpacked = list(unpacked)
         return unpacked
 
     def get_raw_header_property(self, name):
         """Wrapper for grabbing raw header bytes with _get_raw_datum"""
         spec = self.header_format.lookup[name]
-
         return self._get_raw_datum(0, spec)
 
     def get_header_property(self, name):
@@ -633,6 +611,8 @@ class FileManager(object):
             self.header_properties[name] = val
             return val
 
+
+class Reader(FileManager):
     def get_x(self, scale=False):
         if not scale:
             return self.get_dimension("X")
@@ -792,12 +772,7 @@ class FileManager(object):
             raise laspy.util.LaspyException("Extra bytes not present in record")
 
 
-class Reader(FileManager):
-    """Just a subclass of FileManager"""
-    pass
-
-
-class Writer(FileManager):
+class Writer(Reader):
     def setup_write(self, header, vlrs, evlrs):
         super().setup_write(header, vlrs, evlrs)
         if vlrs not in [[], False]:
@@ -959,7 +934,6 @@ class Writer(FileManager):
             for vlr in value:
                 self.data_provider._mmap.write(vlr.to_byte_string())
             self.populate_vlrs()
-            return
         else:
             current_size = self.data_provider._mmap.size()
             current_padding = self.get_padding()
@@ -1069,7 +1043,7 @@ class Writer(FileManager):
             old_evlrs = []
 
         if ("extra_bytes" in self.point_format.lookup) and (len(eb_vlrs) != 0):
-            raise laspy.util.LaspyException("Adding a dimension is ambiguous when there are already extra bytes" 
+            raise laspy.util.LaspyException("Adding a dimension is ambiguous when there are already extra bytes"
                                             "in the point records, but no VLR describing them.")
         new_dimension = laspy.header.ExtraBytesStruct(name=name, data_type=data_type, description=description)
         if len(eb_vlrs) + len(eb_evlrs) > 1:
@@ -1155,18 +1129,6 @@ class Writer(FileManager):
         for start in self.point_refs:
             _mmap[start + offs:start + offs + length] = packer.pack(new_dim[i])
             i += 1
-
-        # idx = xrange(self.calc_point_recs)
-        # starts = (self.point_refs[i] + offs for i in idx)
-        # def f_set(x):
-        #    i = starts.next()
-        #    #self.seek(i, rel = False)
-        #    #self.data_provider._mmap.write(pack(fmt, new_dim[x]))
-        #    self.data_provider._mmap[i:i + length] = pack(fmt,new_dim[x])
-        # map(f_set, idx)
-
-        # Is this desireable
-        # self.data_provider._mmap.flush()    def write_bytes(self, idx, bytes):
         return True
 
     def set_points(self, points):
@@ -1183,7 +1145,6 @@ class Writer(FileManager):
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
         else:
             self.pmap[:] = points[:]
-
 
     def _set_raw_datum(self, rec_offs, spec, val):
         """Set a non dimension field with appropriate record type offset (0 for header)
@@ -1380,13 +1341,13 @@ class Writer(FileManager):
             flag_byte = self.get_flag_byte()
             self.raise_if_overflow(flag, 1)
             out_byte = self.bitpack((flag_byte, flag, flag_byte),
-                                   ((0, 6), (0, 1), (7, 8)))
+                                    ((0, 6), (0, 1), (7, 8)))
             self.set_dimension("flag_byte", out_byte)
         elif self.header.data_format_id in (6, 7, 8, 9, 10):
             flag_byte = self.get_raw_classification_flags()
             self.raise_if_overflow(flag, 1)
             out_byte = self.bitpack((flag_byte, flag, flag_byte),
-                                   ((0, 6), (0, 1), (7, 8)))
+                                    ((0, 6), (0, 1), (7, 8)))
             self.set_dimension("classification_flags", out_byte)
 
     def set_edge_flight_line(self, line):
