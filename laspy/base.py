@@ -988,7 +988,7 @@ class Writer(Reader):
                 self.populate_evlrs()
         else:
             # There are no current extra dimensions.
-            new_vlr = laspy.header.VLR(user_id="LASF_Spec", record_id=4, VLR_body=new_dimension.to_byte_string())
+            new_vlr = laspy.header.VLR(user_id="LASF_Spec", record_id=4, vlr_body=new_dimension.to_byte_string())
             old_vlrs.append(new_vlr)
             self.extra_dimensions = [new_dimension]
 

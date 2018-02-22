@@ -776,7 +776,7 @@ class LasV_14TestCase(unittest.TestCase):
         # Test integer array dimension (len 3)
         new_dim_record3 = header.ExtraBytesStruct(name = "Test Dimension 9", data_type =  26)
         new_VLR_rec = header.VLR(user_id = "LASF_Spec", record_id = 4,
-                VLR_body = (new_dim_record1.to_byte_string() + new_dim_record2.to_byte_string() + new_dim_record3.to_byte_string()))
+                                 vlr_body= (new_dim_record1.to_byte_string() + new_dim_record2.to_byte_string() + new_dim_record3.to_byte_string()))
         new_header.data_record_length += (19)
         File2 = File.File(self.output_tempfile, mode = "w", header = new_header, vlrs = [new_VLR_rec], evlrs = self.File1.header.evlrs)
 
