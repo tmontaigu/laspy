@@ -92,8 +92,10 @@ class FakeMmap(object):
     def seek(self, nbytes, whence=0):
         if whence == 0:
             self.pos = nbytes
-        else:
+        elif 1:
             self.pos += nbytes
+        else:
+            self.pos = len(self.view) + nbytes
 
     def read(self, nbytes):
         out = self.view[self.pos:self.pos + nbytes]
@@ -412,7 +414,7 @@ class FileManager(object):
         """Catalogue the extended variable length records"""
         self.evlrs = []
 
-        if not self.header.version in ("1.3", "1.4"):
+        if self.header.version not in ("1.3", "1.4"):
             return
 
         if self.header.version == "1.3":
@@ -742,59 +744,60 @@ class Writer(Reader):
     def set_evlrs(self, value):
         if value is None or len(value) == 0:
             return
-        if not all([x.isEVLR for x in value]):
+        if not all(x.isEVLR for x in value):
             raise laspy.util.LaspyException(
-                "set_evlrs requers an iterable object composed of :obj:`laspy.header.EVLR` objects.")
-        elif self.mode in ("rw", "w"):
+                "set_evlrs requires an iterable object composed of :obj:`laspy.header.EVLR` objects.")
+        # elif self.mode in ("rw", "w"):
+        if self.header.version == "1.3":
+            old_offset = self.header.start_wavefm_data_rec
+        elif self.header.version == "1.4":
+            old_offset = self.header.start_first_evlr
+            self.set_header_property("num_evlrs", len(value))
+        else:
+            raise laspy.util.LaspyException("Invalid File Version for EVLRs: " + str(self.header.version))
+        # Good we know where the EVLRs should go... but what about if we don't have point records yet?
+        # We can't make that decision yet, in case the user wants to subset the data.
+        if not self.has_point_records:
+            old_offset = self.header.data_offset
             if self.header.version == "1.3":
-                old_offset = self.header.start_wavefm_data_rec
-            elif self.header.version == "1.4":
-                old_offset = self.header.start_first_evlr
-                self.set_header_property("num_evlrs", len(value))
+                self.header.start_wavefm_data_rec = old_offset
             else:
-                raise laspy.util.LaspyException("Invalid File Version for EVLRs: " + str(self.header.version))
-            # Good we know where the EVLRs should go... but what about if we don't have point records yet?
-            # We can't make that decision yet, in case the user wants to subset the data.
-            if not self.has_point_records:
-                old_offset = self.header.data_offset
-                if self.header.version == "1.3":
+                if len(value) == 1:
+                    self.header.start_first_evlr = old_offset
                     self.header.start_wavefm_data_rec = old_offset
                 else:
-                    if len(value) == 1:
-                        self.header.start_first_evlr = old_offset
-                        self.header.start_wavefm_data_rec = old_offset
-                    else:
-                        wf = self.header.start_wavefm_data_rec
-                        fe = self.header.start_first_evlr
-                        new_wvfm = wf - min(wf, fe) + old_offset
-                        new_frst = fe - min(wf, fe) + old_offset
-                        self.header.start_wavefm_data_rec = new_wvfm
-                        self.header.start_first_evlr = new_frst
+                    wf = self.header.start_wavefm_data_rec
+                    fe = self.header.start_first_evlr
+                    new_wvfm = wf - min(wf, fe) + old_offset
+                    new_frst = fe - min(wf, fe) + old_offset
+                    self.header.start_wavefm_data_rec = new_wvfm
+                    self.header.start_first_evlr = new_frst
 
-            self.data_provider.fileref.seek(0)
-            dat_part_1 = self.data_provider._mmap.read(old_offset)
-            # Manually Close:
-            self.data_provider.close(flush=False)
-            self.data_provider.open("w+b")
-            self.data_provider.fileref.write(dat_part_1)
-            total_evlrs = sum([len(x) for x in value])
-            self.data_provider.fileref.write(b"\x00" * total_evlrs)
-            self.data_provider.fileref.close()
-            self.data_provider.open("r+b")
-            self.data_provider.map()
-            self.data_provider._mmap.seek(old_offset)
+        self.data_provider._mmap.seek(0)
+        dat_part_1 = self.data_provider._mmap.read(old_offset)
+        # Manually Close:
+        # self.data_provider.close(flush=False)
+        # self.data_provider.open("w+b")
+        self.data_provider._mmap.seek(0)
+        self.data_provider._mmap.write(dat_part_1)
+        total_evlrs = sum(len(x) for x in value)
+        self.data_provider._mmap.write(b"\x00" * total_evlrs)
+        # self.data_provider._mmap.close()
+        # self.data_provider.open("r+b")
+        # self.data_provider.map()
+        self.data_provider._mmap.seek(old_offset)
 
-            for evlr in value:
-                self.data_provider._mmap.write(evlr.to_byte_string())
+        for evlr in value:
+            self.data_provider._mmap.write(evlr.to_byte_string())
 
-            if self.has_point_records:
-                self.pmap = self.data_provider.point_map(self.point_format, self.header)
-            self.populate_evlrs()
+        if self.has_point_records:
+            self.pmap = self.data_provider.point_map(self.point_format, self.header)
+        self.populate_evlrs()
 
-        else:
-            raise (laspy.util.LaspyException("set_evlrs requires the file to be opened in a " +
-                                             "write mode, and must be performed before point information is provided." +
-                                             "Try closing the file and opening it in rw mode. "))
+        # else:
+        #     raise (laspy.util.LaspyException("set_evlrs requires the file to be opened in a " +
+        #                                      "write mode, and must be performed before point information is provided." +
+        #                                      "Try closing the file and opening it in rw mode. "))
 
     def save_vlrs(self):
         self.set_vlrs(self.vlrs)
@@ -812,7 +815,7 @@ class Writer(Reader):
             new_offset = current_padding + self.header.header_size + sum([len(x) for x in value])
             self.set_header_property("data_offset", new_offset)
             self.set_header_property("num_variable_len_recs", len(value))
-            self.data_provider.fileref.seek(0, 0)
+            self.data_provider.fileref.seek(0)
             dat_part_1 = self.data_provider.fileref.read(self.header.header_size)
             self.data_provider.fileref.seek(old_offset, 0)
             dat_part_2 = self.data_provider.fileref.read(current_size - old_offset)
