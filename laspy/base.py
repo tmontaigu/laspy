@@ -339,19 +339,10 @@ class FileManager(object):
             filesize = max(self._header.data_offset, filesize)
         self._header.data_offset = filesize
         self.data_provider.fileref.write(b"\x00" * filesize)
-        return
 
     def setup_memoizing(self):
         self.header_changes = set()
         self.header_properties = {}
-
-    def populate_c_packers(self):
-        """This is depricated if the numpy point map is used, because nparr.tostring() is MUCH faster.
-        This creates compiled Struct objects for various formats.
-        """
-        for spec in self.point_format.specs:
-            self.c_packers[spec.name] = struct.Struct(spec.fmt)
-            self.c_packers[spec.fmt] = self.c_packers[spec.name]
 
     def packed_str(self, string):
         """Take a little endian binary string, and convert it to a python int."""
@@ -534,9 +525,7 @@ class FileManager(object):
         pts = int(self.get_pointrecordscount())
         length = int(self.header.data_record_length)
         offs = int(self.header.data_offset)
-        self.point_refs = [x * length + offs
-                           for x in xrange(pts)]
-        return
+        self.point_refs = [x * length + offs for x in xrange(pts)]
 
     def get_dimension(self, name):
         """Grab a point dimension by name, returning a numpy array. Refers to
@@ -553,19 +542,6 @@ class FileManager(object):
     def _get_dimension(self, spec):
         return self.pmap["point"][spec.name]
 
-    def _get_dimension_by_specs(self, offs, fmt, length):
-        """Return point dimension of specified offset format and length"""
-        if type(self.point_refs) == bool:
-            self.build_point_refs()
-        _mmap = self.data_provider._mmap
-        prefs = (offs + x for x in self.point_refs)
-        packer = self.c_packers[fmt]
-        return (packer.unpack(_mmap[x:x + length])[0] for x in prefs)
-
-    def _get_raw_dimension(self, spec):
-        """Return point dimension of specified offset format and length"""
-        return self.pmap["point"][spec.name].tostring()
-
     def _get_raw_datum(self, rec_offs, spec):
         """return raw bytes associated with non dimension field (VLR/Header)"""
         start = rec_offs + spec.offs
@@ -578,7 +554,6 @@ class FileManager(object):
             return struct.unpack(spec.fmt, packed_data)[0]
         data = (packed_data[i * spec.length: (i + 1) * spec.length] for i in xrange(spec.num))
         unpacked = (struct.unpack(spec.fmt, buf)[0] for buf in data)
-
 
         if spec.pack:
             if spec.fmt == '<s':
@@ -815,8 +790,6 @@ class Writer(Reader):
         if not all([x.isEVLR for x in value]):
             raise laspy.util.LaspyException("set_evlrs requers an iterable object " +
                                             "composed of :obj:`laspy.header.EVLR` objects.")
-        elif self.mode == "w+":
-            raise NotImplementedError
         elif self.mode in ("rw", "w"):
             if self.header.version == "1.3":
                 old_offset = self.header.start_wavefm_data_rec
@@ -842,11 +815,6 @@ class Writer(Reader):
                         new_frst = fe - min(wf, fe) + old_offset
                         self.header.start_wavefm_data_rec = new_wvfm
                         self.header.start_first_evlr = new_frst
-                        # if old_offset != 0:
-                        #    self.pad_file_for_point_recs(self.get_pointrecordscount())
-                        # else:
-                        #    old_offset = self.header.data_offset
-                        #    self.pad_file_for_point_recs(self.get_pointrecordscount())
 
             self.data_provider.fileref.seek(0, 0)
             dat_part_1 = self.data_provider.fileref.read(old_offset)
@@ -877,13 +845,11 @@ class Writer(Reader):
         self.set_vlrs(self.vlrs)
 
     def set_vlrs(self, value):
-        if value == False or len(value) == 0:
+        if value is False or len(value) == 0:
             return
         if not all([x.isVLR for x in value]):
-            raise laspy.util.LaspyException("set_vlrs requers an iterable object " +
-                                            "composed of :obj:`laspy.header.VLR` objects.")
-        elif self.mode == "w+":
-            raise NotImplementedError
+            raise laspy.util.LaspyException(
+                "set_vlrs requers an iterable object composed of :obj:`laspy.header.VLR` objects.")
         elif self.mode == "rw":
             current_size = self.data_provider._mmap.size()
             current_padding = self.get_padding()
@@ -1096,9 +1062,7 @@ class Writer(Reader):
 
     def set_dimension(self, name, new_dim):
         """Set a dimension (X,Y,Z etc) to the given value."""
-        # if not "__len__" in dir(new_dim):
-        if isinstance(new_dim, GeneratorType):
-            new_dim = list(new_dim)
+        new_dim = list(new_dim)
 
         if not self.has_point_records:
             self.has_point_records = True
