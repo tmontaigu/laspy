@@ -192,7 +192,7 @@ class LasWriterTestCase(unittest.TestCase):
         """Writing and testing X dimenson"""
         x = [i + 1 for i in self.FileObject.X]
         self.FileObject.X = x
-        x2 = self.FileObject.get_x()
+        x2 = self.FileObject.X
         self.assertTrue((list(x) == list(x2)))
         scaled_x = self.FileObject.x
         self.FileObject.x = scaled_x
@@ -202,7 +202,7 @@ class LasWriterTestCase(unittest.TestCase):
         """Writing and testing Y dimension"""
         y = [i + 1 for i in self.FileObject.Y]
         self.FileObject.Y = y
-        y2 = self.FileObject.get_y()
+        y2 = self.FileObject.Y
         self.assertTrue((list(y) == list(y2)))
         scaled_y = self.FileObject.y
         self.FileObject.y = scaled_y
@@ -212,7 +212,7 @@ class LasWriterTestCase(unittest.TestCase):
         """Writing and testing Z dimension"""
         z = [i + 1 for i in self.FileObject.Z ]
         self.FileObject.Z = z
-        z2 = self.FileObject.get_z()
+        z2 = self.FileObject.Z
         self.assertTrue((list(z) == list(z2)))
         scaled_z = self.FileObject.z
         self.FileObject.z = scaled_z
@@ -226,10 +226,10 @@ class LasWriterTestCase(unittest.TestCase):
         self.assertTrue((i == list(i2)))
     def test_return_num(self):
         """Writing and testing return_num dimension"""
-        rn = [i + 1 for i in self.FileObject.return_num]
+        rn = np.array([i + 1 for i in self.FileObject.return_num], np.uint8)
         self.FileObject.return_num = rn
-        rn2 = self.FileObject.get_return_num()
-        self.assertTrue((rn == list(rn2)))
+        rn2 = self.FileObject.return_num
+        self.assertTrue(np.allclose(rn, rn2))
     def test_overflow_return_num(self):
         """Testing overflow handling"""
         rn = [x + 100000 for x in self.FileObject.return_num]
@@ -237,46 +237,46 @@ class LasWriterTestCase(unittest.TestCase):
             self.FileObject.return_num = rn
     def test_num_returns(self):
         """Writing and testing num_returns dimension"""
-        nr = [i + 1 for i in self.FileObject.num_returns]
+        nr = np.array([i + 1 for i in self.FileObject.num_returns], np.uint8)
         self.FileObject.num_returns = nr
-        nr2 = self.FileObject.get_num_returns()
-        self.assertTrue((nr == list(nr2)))
+        nr2 = self.FileObject.num_returns
+        self.assertTrue(np.allclose(nr, nr2))
     def test_scan_dir_flag(self):
         """Writing and testing scan_dir_flag dimension"""
-        sdf = [flip_bit(x) for x in self.FileObject.scan_dir_flag]
+        sdf = np.array([flip_bit(x) for x in self.FileObject.scan_dir_flag], np.uint8)
         self.FileObject.scan_dir_flag = sdf
-        sdf2 = self.FileObject.get_scan_dir_flag()
-        self.assertTrue((sdf == list(sdf2)))
+        sdf2 = self.FileObject.scan_dir_flag
+        self.assertTrue(np.allclose(sdf, sdf2))
     def test_edge_flight_line(self):
         """Writing and testing edge_flight_line dimension"""
-        efl = [flip_bit(x) for x in self.FileObject.edge_flight_line]
+        efl = np.array([flip_bit(x) for x in self.FileObject.edge_flight_line], np.uint8)
         self.FileObject.edge_flight_line = efl
-        efl2 = self.FileObject.get_edge_flight_line()
-        self.assertTrue((efl == list(efl2)))
+        efl2 = self.FileObject.edge_flight_line
+        self.assertTrue(np.allclose(efl, efl2))
     def test_classification(self):
         """Writing and testing classification byte."""
-        c1 = [x + 1 for x in self.FileObject.classification]
+        c1 = np.array([x + 1 for x in self.FileObject.classification], np.uint8)
         self.FileObject.classification = c1
-        c2 = [x for x in self.FileObject.get_classification()]
-        self.assertTrue((c1 == c2))
+        c2 = np.array([x for x in self.FileObject.classification], np.uint8)
+        self.assertTrue(np.allclose(c1, c2))
     def test_synthetic(self):
         """Writing and testing synthetic"""
-        s1 = [flip_bit(x) for x in self.FileObject.synthetic]
+        s1 = np.array([flip_bit(x) for x in self.FileObject.synthetic], np.uint8)
         self.FileObject.synthetic = s1
-        s2 = self.FileObject.get_synthetic()
-        self.assertTrue((s1 == list(s2)))
+        s2 = self.FileObject.synthetic
+        self.assertTrue(np.allclose(s1, s2))
     def test_key_point(self):
         """Writing and testing key point"""
-        k1 = [flip_bit(x) for x in self.FileObject.key_point]
+        k1 = np.array([flip_bit(x) for x in self.FileObject.key_point], np.uint8)
         self.FileObject.key_point = k1
-        k2 = self.FileObject.get_key_point()
-        self.assertTrue((k1 == list(k2)))
+        k2 = self.FileObject.key_point
+        self.assertTrue(np.allclose(k1, k2))
     def test_withheld(self):
         """Writing and testing withheld"""
-        w1 = [flip_bit(x) for x in self.FileObject.withheld]
+        w1 = np.array([flip_bit(x) for x in self.FileObject.withheld], np.uint8)
         self.FileObject.withheld = w1
-        w2 = self.FileObject.get_withheld()
-        self.assertTrue((w1 == list(w2)))
+        w2 = self.FileObject.withheld
+        self.assertTrue(np.allclose(w1, w2))
     def test_scan_angle_rank(self):
         """Writing and testing scan angle rank"""
         ar1 = [i-1 for i in self.FileObject.scan_angle_rank]
@@ -530,9 +530,9 @@ class LasWriteModeTestCase(unittest.TestCase):
         File2.X = X
         File2.Y = Y
         File2.Z = Z
-        self.assertTrue((list(X) == list(File2.get_x())))
-        self.assertTrue((list(Y) == list(File2.get_y())))
-        self.assertTrue((list(Z) == list(File2.get_z())))
+        self.assertTrue((list(X) == list(File2.X)))
+        self.assertTrue((list(Y) == list(File2.Y)))
+        self.assertTrue((list(Z) == list(File2.Z)))
         File2.close(ignore_header_changes = True)
 
     def test_using_existing_header(self):
@@ -546,9 +546,9 @@ class LasWriteModeTestCase(unittest.TestCase):
         File2.Z = Z
         File2.Y = Y
         File2.X = X
-        self.assertTrue((list(X) == list(File2.get_x())))
-        self.assertTrue((list(Y) == list(File2.get_y())))
-        self.assertTrue((list(Z) == list(File2.get_z())))
+        self.assertTrue((list(X) == list(File2.X)))
+        self.assertTrue((list(Y) == list(File2.Y)))
+        self.assertTrue((list(Z) == list(File2.Z)))
         File2.close(ignore_header_changes = True)
 
     def test_format_change_and_extra_bytes(self):
@@ -563,9 +563,9 @@ class LasWriteModeTestCase(unittest.TestCase):
         File2 = File.File(self.output_tempfile, mode = "w",
                             header = new_header)
         for dim in File1.point_format:
-            in_dim = File1.reader.get_dimension(dim.name)
+            in_dim = File1.get_dimension(dim.name)
             if dim.name in File2.point_format.lookup:
-                File2.writer.set_dimension(dim.name, in_dim)
+                File2.set_dimension(dim.name, in_dim)
         File2.extra_bytes = [b"Test"] * len(File2)
         self.assertTrue(b"Test" in bytes(File2.get_extra_bytes()[14]))
         File2.close(ignore_header_changes = True)
@@ -757,13 +757,13 @@ class LasV_14TestCase(unittest.TestCase):
         File2.return_num = return_num
         File2.num_returns = num_returns
 
-        self.assertTrue(all(num_returns == File2.get_num_returns()))
-        self.assertTrue(all(return_num == File2.get_return_num()))
-        self.assertTrue(all(edge_flight_line == File2.get_edge_flight_line()))
-        self.assertTrue(all(scan_dir_flag ==File2.get_scan_dir_flag() ))
-        self.assertTrue(all(classification_flags == File2.get_classification_flags()))
-        self.assertTrue(all(classification == File2.get_classification()))
-        self.assertTrue(all(scanner_channel == File2.get_scanner_channel()))
+        self.assertTrue(all(num_returns == File2.num_returns))
+        self.assertTrue(all(return_num == File2.return_num))
+        self.assertTrue(all(edge_flight_line == File2.edge_flight_line))
+        self.assertTrue(all(scan_dir_flag ==File2.scan_dir_flag ))
+        self.assertTrue(all(classification_flags == File2.classification_flags))
+        self.assertTrue(all(classification == File2.classification))
+        self.assertTrue(all(scanner_channel == File2.scanner_channel))
         File2.close(ignore_header_changes = True)
 
     def test_vlr_defined_dimensions(self):
@@ -782,9 +782,9 @@ class LasV_14TestCase(unittest.TestCase):
 
         File2.X = self.File1.X
 
-        File2._writer.set_dimension("test_dimension_1234", [4]*len(self.File1))
-        File2._writer.set_dimension("test_dimension_5678", ["AAA"]*len(self.File1))
-        File2._writer.set_dimension("test_dimension_9", [[1,2,3]]*len(self.File1))
+        File2.set_dimension("test_dimension_1234", [4]*len(self.File1))
+        File2.set_dimension("test_dimension_5678", ["AAA"]*len(self.File1))
+        File2.set_dimension("test_dimension_9", [[1,2,3]]*len(self.File1))
         self.assertTrue(all(np.array([4]*len(self.File1)) == File2.test_dimension_1234))
         self.assertTrue(all(np.array([b"AAA"]*len(self.File1)) == File2.test_dimension_5678))
         self.assertEqual(list(File2.test_dimension_9[100]), [1,2,3])

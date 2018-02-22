@@ -32,7 +32,14 @@ class lasview():
             quit()
         
     def view(self):
-        self.inFile.visualize(self.mode, self.dim)
+        try:
+            from laspy import glviewer
+            glviewer.run_glviewer(self, mode=self.mode, dim=self.dim)
+            return 0
+        except Exception as err:
+            print("Something went wrong: ")
+            print(err)
+            return 1
 
 def main():
     expl = lasview()
