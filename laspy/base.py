@@ -104,19 +104,14 @@ class FakeMmap(object):
         return len(self.view)
 
 
-def is_point_fmt_compressed(point_fmt):
-    compression_bit_7 = (point_fmt & 0x80) >> 7
-    compression_bit_6 = (point_fmt & 0x40) >> 6
-    if not compression_bit_6 and compression_bit_7:
-        return True
-    return False
+
 
 
 def seek_is_compressed(stream):
     stream.seek(104)
     fmt = int(struct.unpack("<B", stream.read(1))[0])
     stream.seek(0)
-    return is_point_fmt_compressed(fmt)
+    return laspy.util.is_point_fmt_compressed(fmt)
 
 
 class DataProvider:
@@ -482,15 +477,7 @@ class FileManager(object):
     def get_dimension(self, name):
         """Grab a point dimension by name, returning a numpy array. Refers to
         reader.point_format for the required Spec instance."""
-        try:
-            spec = self.point_format.lookup[name]
-            return self._get_dimension(spec)
-        except KeyError:
-            raise laspy.util.LaspyException(
-                "Dimension: {} not found".format(name))
-
-    def _get_dimension(self, spec):
-        return self.pmap["point"][spec.name]
+        return self.pmap["point"][name]
 
     def _get_raw_datum(self, rec_offs, spec):
         """return raw bytes associated with non dimension field (VLR/Header)"""
