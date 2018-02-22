@@ -1,5 +1,6 @@
 import mmap
 import laspy
+import io
 import os
 import datetime
 import struct
@@ -65,6 +66,7 @@ class FakeMmap(object):
             data = stream.read()
         self.view = bytearray(data)
         self.pos = 0
+        # self.stream = io.Buffered(self.view)
         self.__buffer__ = self.view
 
     def __len__(self):
@@ -81,7 +83,8 @@ class FakeMmap(object):
         self.view[key] = value
 
     def close(self):
-        self.view = None
+        # self.view = None
+        pass
 
     def flush(self):
         pass
@@ -96,6 +99,15 @@ class FakeMmap(object):
         out = self.view[self.pos:self.pos + nbytes]
         self.pos += nbytes
         return out
+
+    def write(self, b):
+        # self.view[self.pos: self.pos + len(b)] = b
+        # self.pos += len(b)
+        print('before write', len(self.view), 'want to write:', len(b))
+        if self.pos >= len(self.view):
+            self.view += b
+            self.pos += len(b)
+        print('after write', len(self.view))
 
     def tell(self):
         return self.pos
@@ -128,6 +140,7 @@ class DataProvider:
 
     def open(self, mode):
         self.fileref = open(self.filename, mode)
+        self.map()
 
     def get_point_map(self, informat, header):
         """Get point map is used to build and return a numpy frombuffer view of the mmapped data,
@@ -173,26 +186,30 @@ class DataProvider:
         if flush and self._mmap is not None:
             self._mmap.flush()
             self._mmap.close()
-        self._mmap = None
+        # self._mmap = None
         if self.fileref:
             self.fileref.close()
 
     def map(self):
         """Memory map the file"""
+        if self._mmap is not None:
+            return
         if self.mode != "w":
             is_compressed = seek_is_compressed(self.fileref)
             self._mmap = FakeMmap(self.fileref, is_compressed)
         else:
-            access_right = mmap.ACCESS_READ if "w" not in self.mode else mmap.ACCESS_WRITE
-            self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=access_right)
+            self._mmap = FakeMmap(self.fileref, False)
+            # access_right = mmap.ACCESS_READ if "w" not in self.mode else mmap.ACCESS_WRITE
+            # self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=access_right)
 
     def remap(self, flush=True):
         """Re-map the file. Flush changes, close, open, and map. Optionally point map."""
         if flush and self._mmap is not None:
             self._mmap.flush()
-        self.close(flush=False)
-        self.open("r+b")
-        self.map()
+        self._mmap.seek(0)
+        # self.close(flush=False)
+        # self.open("r+b")
+        # self.map()
 
 
 class FileManager(object):
@@ -320,7 +337,7 @@ class FileManager(object):
         if self._header.data_offset != 0:
             filesize = max(self._header.data_offset, filesize)
         self._header.data_offset = filesize
-        self.data_provider.fileref.write(b"\x00" * filesize)
+        self.data_provider._mmap.write(b"\x00" * filesize)
 
     def packed_str(self, string):
         """Take a little endian binary string, and convert it to a python int."""
@@ -755,7 +772,7 @@ class Writer(Reader):
                         self.header.start_first_evlr = new_frst
 
             self.data_provider.fileref.seek(0)
-            dat_part_1 = self.data_provider.fileref.read(old_offset)
+            dat_part_1 = self.data_provider._mmap.read(old_offset)
             # Manually Close:
             self.data_provider.close(flush=False)
             self.data_provider.open("w+b")
@@ -911,21 +928,24 @@ class Writer(Reader):
         if self.evlrs in [False, []]:
             old_size = self.header.data_offset
             self.data_provider._mmap.flush()
-            self.data_provider.fileref.seek(old_size, 0)
-            self.data_provider.fileref.write(b"\x00" * bytes_to_pad)
-            self.data_provider.fileref.flush()
+            self.data_provider._mmap.seek(old_size)
+            print('old_size', old_size)
+            print('tell:', self.data_provider._mmap.tell())
+            self.data_provider._mmap.write(b"\x00" * bytes_to_pad)
+            print('pad', bytes_to_pad)
+            print(len(self.data_provider._mmap.view))
+            # self.data_provider.fileref.flush()
             self.data_provider.remap(flush=False)
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
-            # Write Phase complete, enter rw mode?
             self.padded = num_recs
         else:
             d1 = self.data_provider._mmap[0:self.header.data_offset]
             d2 = self.data_provider._mmap[self.header.data_offset:self.data_provider._mmap.size()]
             self.data_provider.close()
             self.data_provider.open("w+b")
-            self.data_provider.fileref.write(d1)
-            self.data_provider.fileref.write(b"\x00" * bytes_to_pad)
-            self.data_provider.fileref.write(d2)
+            self.data_provider._mmap.write(d1)
+            self.data_provider._mmap.write(b"\x00" * bytes_to_pad)
+            self.data_provider._mmap.write(d2)
             self.data_provider.close()
             self.data_provider.remap()
             self.pmap = self.data_provider.point_map(self.point_format, self.header)
