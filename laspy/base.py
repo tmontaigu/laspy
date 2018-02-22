@@ -181,20 +181,14 @@ class DataProvider:
 
     def map(self):
         """Memory map the file"""
-        if self.fileref is False and not self.compressed:
+        if self.fileref is None and not self.compressed:
             raise laspy.util.LaspyException("File not opened.")
-        try:
-            if self.mode in ("r", "r-"):
-                if self.compressed and self.mode != "r-":
-                    self._mmap = FakeMmap(self.filename)
-                else:
-                    self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=mmap.ACCESS_READ)
-            elif self.mode in ("w", "rw"):
-                self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=mmap.ACCESS_WRITE)
-            else:
-                raise laspy.util.LaspyException("Invalid Mode: " + str(self.mode))
-        except Exception as e:
-            raise laspy.util.LaspyException("Error mapping file: " + str(e))
+
+        if self.compressed:
+            self._mmap = FakeMmap(self.filename)
+        else:
+            access_right = mmap.ACCESS_READ if "w" not in self.mode else mmap.ACCESS_WRITE
+            self._mmap = mmap.mmap(self.fileref.fileno(), 0, access=access_right)
 
     def remap(self, flush=True):
         """Re-map the file. Flush changes, close, open, and map. Optionally point map."""
