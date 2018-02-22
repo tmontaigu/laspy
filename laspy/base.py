@@ -105,11 +105,16 @@ class FakeMmap(object):
     def write(self, b):
         # self.view[self.pos: self.pos + len(b)] = b
         # self.pos += len(b)
-        print('before write', len(self.view), 'want to write:', len(b))
-        if self.pos >= len(self.view):
+        # print('before write', len(self.view), 'want to write:', len(b))
+        if self.pos == len(self.view):
             self.view += b
-            self.pos += len(b)
-        print('after write', len(self.view))
+        else:
+            len_to_pad = len(b) - (len(self.view) - self.pos)
+            # print("pos: {}, len(b): {}, len(view) {}, pad: {}".format(self.pos, len(b), len(self.view), len_to_pad))
+            self.view += b'\x00' * len_to_pad
+            self.view[self.pos: self.pos + len(b)] = b
+        self.pos += len(b)
+        # print('after write', len(self.view))
 
     def tell(self):
         return self.pos
@@ -890,8 +895,8 @@ class Writer(Reader):
             raise laspy.util.LaspyException("New Padding Value Overwrites VLRs")
         if self.mode == "w":
             if not self.has_point_records:
-                self.data_provider.fileref.seek(self.vlr_stop, 0)
-                self.data_provider.fileref.write(b"\x00" * value)
+                self.data_provider._mmap.seek(self.vlr_stop)
+                self.data_provider._mmap.write(b"\x00" * value)
                 self.data_provider.remap()
                 return
             else:
@@ -899,10 +904,7 @@ class Writer(Reader):
                     "Laspy does not yet support assignment of EVLRs for files which already contain point records.")
         elif self.mode == "rw":
             old_offset = self.header.data_offset
-            self.set_header_property("data_offset",
-                                     self.vlr_stop + value)
-            # self.header.data_offset = self.vlr_stop + value
-            self.data_provider._mmap.flush()
+            self.set_header_property("data_offset", self.vlr_stop + value)
             self.data_provider._mmap.seek(0)
             dat_part_1 = self.data_provider._mmap.read(self.vlr_stop)
             self.data_provider._mmap.seek(old_offset)
@@ -913,13 +915,9 @@ class Writer(Reader):
             self.data_provider.fileref.write(b"\x00" * value)
             self.data_provider.fileref.write(dat_part_2)
             self.data_provider.close()
-            self.__init__(self.data_provider.filename, self.mode)
             return len(self.data_provider._mmap)
-        elif self.mode == "r+":
-            pass
         else:
             raise (laspy.util.LaspyException("Must be in write mode to change padding."))
-        return len(self.data_provider._mmap)
 
     def pad_file_for_point_recs(self, num_recs):
         """Pad the file with null bytes out to a calculated length based on
