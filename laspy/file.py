@@ -61,30 +61,12 @@ class File(object):
         self.file_manager = None
 
         if mode == 'w':
-            self.open_create(header, vlrs, evlrs)
+            raise NotImplementedError("lol")
         else:
-            self.file_manager = base.FileRW(self.filename, mode=self._mode)
+            self.file_manager = base.Writer(self.filename, mode=self._mode)
 
         self._header = self.file_manager.get_header()
         self.add_extra_dimensions(self.file_manager.extra_dimensions)
-
-    def open_create(self, header, vlrs, evlrs):
-        if header is None:
-            raise util.LaspyException("Creation of a file in write mode requires a header object.")
-        if isinstance(header, HeaderManager):
-            vlrs = [] if vlrs is None else vlrs
-            evlrs = [] if evlrs is None else evlrs
-            vlrs.extend(header.vlrs)
-            evlrs.extend(header.evlrs)
-            header = header.copy()
-
-        self.file_manager = base.FileCreator(
-            self.filename,
-            mode="w",
-            header=header,
-            vlrs=vlrs,
-            evlrs=evlrs
-        )
 
     def add_extra_dimensions(self, extra_dims):
         if extra_dims:
@@ -95,11 +77,7 @@ class File(object):
     def close(self, ignore_header_changes=False, minmax_mode="scaled"):
         """Closes the LAS file
         """
-        if self._mode in ("r", "r-"):
-            self.file_manager.close()
-        else:
-            self.file_manager.close(ignore_header_changes, minmax_mode)
-
+        self.file_manager.close()
         self.file_manager = None
         self._header = None
 
@@ -559,7 +537,6 @@ class File(object):
                     self.at_end = True
             else:
                 self.close()
-                self.open()
         else:
             raise StopIteration("Iteration only supported in read mode, try using FileObject.points")
 

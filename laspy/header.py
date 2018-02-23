@@ -425,7 +425,6 @@ class VLR(ParseableVLR):
         self.reader = False
         self.body_fmt = None
 
-
         self.isVLR = True
         self.fmt = util.Format("VLR")
         if "LASF_Spec" in self.user_id and self.record_id == 4:
@@ -567,9 +566,6 @@ class HeaderManager(object):
         self.reader = reader
         self.writer = reader
         self._header = header
-        self.file_mode = reader.mode
-        if self.file_mode == "w":
-            self.allow_all_overwritables()
 
     def copy(self):
         return self.__copy__()
@@ -596,11 +592,6 @@ class HeaderManager(object):
         for spec in self._header.format.specs:
             spec.overwritable = True
 
-    def assertWriteMode(self):
-        """Assert that header has permission to write data to file."""
-        if self.file_mode == "r":
-            raise LaspyHeaderException("Header instance is not in write mode.")
-
     def read_words(self, offs, fmt, num, length, pack):
         """Read binary data"""
         self.reader.data_provider._mmap(offs, rel=False)
@@ -623,7 +614,6 @@ class HeaderManager(object):
 
     def set_filesourceid(self, value):
         """Set the file source id"""
-        self.assertWriteMode()
         self.writer.set_header_property("file_source_id", value)
 
     doc = '''The file source ID for the file.'''
@@ -635,7 +625,6 @@ class HeaderManager(object):
         return self.reader.get_header_property("global_encoding")
 
     def set_global_encoding(self, value):
-        self.assertWriteMode()
         self.writer.set_header_property("global_encoding", value)
         return
 
@@ -663,11 +652,9 @@ class HeaderManager(object):
         return self.reader.binary_str(raw_encoding, 16)[0]
 
     def set_gps_time_type(self, value):
-        self.assertWriteMode()
         raw_encoding = self.reader.binary_str(self.get_global_encoding(), 16)
         self.set_global_encoding(self.reader.packed_str(str(value)
                                                         + raw_encoding[1:]))
-        return
 
     gps_time_type = property(get_gps_time_type, set_gps_time_type, None, doc)
 
@@ -676,10 +663,8 @@ class HeaderManager(object):
         return self.reader.binary_str(raw_encoding, 16)[1]
 
     def set_waveform_data_packets_internal(self, value):
-        self.assertWriteMode()
         raw_encoding = self.reader.binary_str(self.get_global_encoding(), 16)
         self.set_global_encoding(self.reader.packed_str(raw_encoding[0] + str(value) + raw_encoding[2:]))
-        return
 
     waveform_data_packets_internal = property(get_waveform_data_packets_internal,
                                               set_waveform_data_packets_internal,
@@ -690,7 +675,6 @@ class HeaderManager(object):
         return self.reader.binary_str(raw_encoding, 16)[2]
 
     def set_waveform_data_packets_external(self, value):
-        self.assertWriteMode()
         raw_encoding = self.reader.binary_str(self.get_global_encoding(), 16)
         self.set_global_encoding(self.reader.packed_str(raw_encoding[0:2] + str(value) + raw_encoding[3:]))
         return
@@ -704,7 +688,6 @@ class HeaderManager(object):
         return self.reader.binary_str(raw_encoding, 16)[3]
 
     def set_synthetic_return_num(self, value):
-        self.assertWriteMode()
         raw_encoding = self.reader.binary_str(self.get_global_encoding(), 16)
         self.set_global_encoding(self.reader.packed_str(raw_encoding[0:3] + str(value) + raw_encoding[4:]))
         return
@@ -720,7 +703,6 @@ class HeaderManager(object):
             raise util.LaspyException("WKT not present in data_format_id " + str(self.data_format_id))
 
     def set_wkt(self, value):
-        self.assertWriteMode()
         if self.data_format_id > 5:
             raw_encoding = self.reader.binary_str(self.get_global_encoding(), 16)
             self.set_global_encoding(self.reader.packed_str(raw_encoding[0:4] + str(value) + raw_encoding[5:]))
@@ -785,7 +767,6 @@ class HeaderManager(object):
     def set_majorversion(self, value):
         """Sets the major version for the file. Only the value 1 is accepted
         at this time"""
-        self.assertWriteMode()
         self.writer.set_header_property("version_major", value)
         return
 
@@ -802,7 +783,6 @@ class HeaderManager(object):
     def set_minorversion(self, value):
         """Sets the minor version of the file. The value should be 0 for 1.0
         LAS files, 1 for 1.1 LAS files ..."""
-        self.assertWriteMode()
         self.writer.set_header_property("version_minor", value)
         return
 
@@ -813,7 +793,6 @@ class HeaderManager(object):
 
     def set_version(self, value):
         major, minor = value.split('.')
-        self.assertWriteMode()
         self.writer.set_header_property("version_major", int(major))
         self.writer.set_header_property("version_minor", int(minor))
 
@@ -833,7 +812,6 @@ class HeaderManager(object):
     def set_systemid(self, value):
         """Sets the system identifier. The value is truncated to 31
         characters"""
-        self.assertWriteMode()
         self.writer.set_header_property("system_id", value)
         return
 
@@ -847,7 +825,6 @@ class HeaderManager(object):
     def set_softwareid(self, value):
         """Sets the software identifier.
         """
-        self.assertWriteMode()
         return self.writer.set_header_property("software_id", value)
 
     doc = '''The software ID for the file'''
@@ -870,7 +847,6 @@ class HeaderManager(object):
     def set_date(self, value=datetime.datetime.now()):
         """Set the header's date from a :obj:`datetime.datetime` instance.
         """
-        self.assertWriteMode()
         delta = value - datetime.datetime(value.year, 1, 1)
         self.writer.set_header_property("created_day", delta.days + 1)
         self.writer.set_header_property("created_year", value.year)
@@ -900,7 +876,6 @@ class HeaderManager(object):
         return self.reader.get_header_property("header_size")
 
     def set_headersize(self, val):
-        self.assertWriteMode()
         self.writer.set_header_property("header size", val)
 
     doc = '''The header size for the file. You probably shouldn't touch this.'''
@@ -918,10 +893,7 @@ class HeaderManager(object):
         Any space between this value and the end of the VLRs will be written
         with 0's
         """
-        self.assertWriteMode()
-        ## writer.set_padding handles data offset update.
         self.writer.set_padding(value - self.writer.vlr_stop)
-        return
 
     doc = '''The offset to the point data in the file. This can not be smaller then the header size + VLR length. '''
     data_offset = property(get_dataoffset, set_dataoffset, None, doc)
@@ -931,17 +903,6 @@ class HeaderManager(object):
            beginning of the point data."""
         return self.reader.get_padding()
 
-    def set_padding(self, value):
-        """Sets the header's padding.
-        """
-        self.assertWriteMode()
-        self.writer.set_padding(value)
-        return
-
-    doc = '''The number of bytes between the end of the VLRs and the 
-    beginning of the point data.
-    '''
-    padding = property(get_padding, set_padding, None, doc)
 
     def get_recordscount(self):
         return self.reader.get_pointrecordscount()
@@ -959,16 +920,12 @@ class HeaderManager(object):
         """Set the data format ID. This is only available for files in write mode which have not yet been given points."""
         if value not in range(6):
             raise LaspyHeaderException("Format ID must be 3, 2, 1, or 0")
-        if not self.file_mode in ("w", "w+"):
-            raise LaspyHeaderException("Point Format ID can only be set for " +
-                                       "files in write or append mode.")
         if self.writer.get_pointrecordscount() > 0:
             raise LaspyHeaderException("Modification of the format of existing " +
                                        "points is not currently supported. Make " +
                                        "your modifications in numpy and create " +
                                        "a new file.")
         self.writer.set_header_property("data_format_id", value)
-        return
 
     '''The data format ID for the file, determines what point fields are present.'''
     dataformat_id = property(get_dataformatid, set_dataformatid, None, doc)
@@ -993,10 +950,7 @@ class HeaderManager(object):
     doc = '''The header format for the file. Supports .xml and .etree methods.'''
 
     def set_schema(self, value):
-        if self.file_mode != "w":
-            raise NotImplementedError("Converseion between formats is not supported.")
-        else:
-            self.reader.header_format = value
+        self.reader.header_format = value
 
     schema = property(get_schema, set_schema, None, doc)
     header_format = schema
@@ -1061,7 +1015,6 @@ class HeaderManager(object):
         returns 0..8
         Preferred method is to use header.update_histogram.
         """
-        self.assertWriteMode()
         self.writer.set_header_property("point_return_count", value)
         return
 
@@ -1076,27 +1029,11 @@ class HeaderManager(object):
         """Update the histogram of returns by number"""
         rawdata = self.writer.get_return_num()
         rawdata[rawdata == 0] = 1  #
-
-        # if self.version == "1.3":
-        #    histDict = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0}
-        # elif self.version in ["1.0", "1.1", "1.2"]:
-        #    histDict = {1:0, 2:0, 3:0, 4:0, 5:0}
-        # else:
-        #    raise LaspyException("Invalid file version: " + self.version)
-        # for i in rawdata:
-        #    histDict[i] += 1        
-        # raw_hist = histDict.values()
-        # if self.data_format_id in (range(6)):
         if self.version != "1.4":
             raw_hist = np.histogram(list(rawdata), bins=range(1, 7))
 
         else:
             raw_hist = np.histogram(list(rawdata), bins=range(1, 17))
-        # print("Raw Hist: " + str(raw_hist))
-        # t = raw_hist[0][4]
-        # for ret in [3,2,1,0]:
-        #    raw_hist[0][ret] -= t
-        #    t += raw_hist[0][ret]
         try:
             self.writer.set_header_property("point_return_count", raw_hist[0])
         except util.LaspyException:
@@ -1130,7 +1067,6 @@ class HeaderManager(object):
     def set_scale(self, value):
         """Sets the scale factors in [x, y, z] for the point data.
         """
-        self.assertWriteMode()
         self.writer.set_header_property("x_scale", value[0])
         self.writer.set_header_property("y_scale", value[1])
         self.writer.set_header_property("z_scale", value[2])
@@ -1162,11 +1098,9 @@ class HeaderManager(object):
     def set_offset(self, value):
         """Sets the offset factors in [x, y, z] for the point data.
         """
-        self.assertWriteMode()
         self.writer.set_header_property("x_offset", value[0])
         self.writer.set_header_property("y_offset", value[1])
         self.writer.set_header_property("z_offset", value[2])
-        return
 
     doc = '''The offset factors in [x, y, z] for the point data.
 
@@ -1205,7 +1139,6 @@ class HeaderManager(object):
         """Sets the minimum values of [x, y, z] for the data.
         Preferred method is to use header.update_min_max.
         """
-        self.assertWriteMode()
         self.writer.set_header_property("x_min", value[0])
         self.writer.set_header_property("y_min", value[1])
         self.writer.set_header_property("z_min", value[2])
@@ -1231,7 +1164,6 @@ class HeaderManager(object):
         """Sets the maximum values of [x, y, z] for the data.
         Preferred method is header.update_min_max()
         """
-        self.assertWriteMode()
         self.writer.set_header_property("x_max", value[0])
         self.writer.set_header_property("y_max", value[1])
         self.writer.set_header_property("z_max", value[2])
@@ -1247,7 +1179,6 @@ class HeaderManager(object):
         return self.reader.get_header_property("start_wavefm_data_rec")
 
     def set_start_wavefm_data_record(self, value):
-        self.assertWriteMode()
         if not self.version in ("1.3", "1.4"):
             raise util.LaspyException("Waveform data not present in version: " + self.version)
         self.reader.set_header_property("start_wavefm_data_rec", value)
@@ -1275,11 +1206,7 @@ class HeaderManager(object):
     def set_num_evlrs(self, value):
         if not self.version == "1.4":
             raise util.LaspyException("EVLRs are present explicitly only in version 1.4")
-        self.assertWriteMode()
         self.reader.set_header_property("num_evlrs", value)
-
-    # Encourage users to use len(file.header.vlrs)
-    # num_evlrs = property(get_num_evlrs, set_num_evlrs, None, None)
 
     def get_legacy_point_records_count(self):
         if not self.version == "1.4":
@@ -1305,24 +1232,11 @@ class HeaderManager(object):
 
     legacy_point_return_count = property(get_legacy_point_return_count, set_legacy_point_return_count, None, None)
 
-    def xml(self):
-        """Return an xml repreentation of header data. (not implemented)"""
-        raise NotImplementedError
-
-    def etree(self):
-        """Return an etree representation of header data. (not implemented)"""
-        raise NotImplementedError
-
-    def add_vlr(self, value):
-        return
-
     def get_vlrs(self):
         return self.reader.get_vlrs()
 
     def set_vlrs(self, value):
-        self.assertWriteMode()
         self.reader.set_vlrs(value)
-        return
 
     doc = '''Get/set the VLR`'s for the header as a list
         VLR's are completely overwritten, so to append a VLR, first retreive
@@ -1332,22 +1246,12 @@ class HeaderManager(object):
 
     def save_vlrs(self):
         """Write any changes to the VLRs to the file."""
-        self.assertWriteMode()
         self.writer.save_vlrs()
 
     def get_evlrs(self):
         return self.reader.get_evlrs()
 
     def set_evlrs(self, value):
-        self.assertWriteMode()
         self.reader.set_evlrs(value)
 
     evlrs = property(get_evlrs, set_evlrs, None, None)
-
-    def get_srs(self):
-        raise NotImplementedError
-
-    def set_srs(self, value):
-        raise NotImplementedError
-
-    srs = property(get_srs, set_srs)
