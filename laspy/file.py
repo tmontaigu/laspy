@@ -63,7 +63,7 @@ class File(object):
         if mode == 'w':
             raise NotImplementedError("lol")
         else:
-            self.file_manager = base.Writer(self.filename, mode=self._mode)
+            self.file_manager = base.Writer(self.filename)
 
         self._header = self.file_manager.get_header()
         self.add_extra_dimensions(self.file_manager.extra_dimensions)

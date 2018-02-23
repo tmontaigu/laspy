@@ -10,6 +10,8 @@ import copy
 from laspy import util
 
 # Not used right now - but could be a handy place to centralize file modes
+from laspy.header import EVLRType
+
 FILE_MODES = ["r-", "r", "rw", "w"]
 
 try:
@@ -163,7 +165,7 @@ class DataProvider:
 class FileManager(object):
     """Superclass of Reader and Writer, provides most of the data manipulation functionality in laspy."""
 
-    def __init__(self, filename, mode):
+    def __init__(self, filename):
         """Build the FileManager object. This is done when opening the file
         as well as upon completion of file modification actions like changing the
         header padding."""
@@ -348,7 +350,6 @@ class FileManager(object):
             return
         self._current = index
         return laspy.util.Point(self, self.get_raw_point(index), nice=nice)
-
 
     def build_point_refs(self):
         """Build array of point offsets """
@@ -568,29 +569,27 @@ class Reader(FileManager):
 
 
 class Writer(Reader):
-    def __init__(self, filename, mode):
-        super().__init__(filename, mode)
+    def __init__(self, filename):
+        super().__init__(filename)
 
         self._header_current = True
-        self.header_format = laspy.util.Format("h" + self.grab_file_version())
-        self.header = laspy.header.HeaderManager(header=laspy.header.Header(self.grab_file_version()), reader=self)
+        file_vers = self.grab_file_version()
+        self.header_format = laspy.util.Format("h" + file_vers)
+        self.header = laspy.header.HeaderManager(header=laspy.header.Header(file_vers), reader=self)
         self.populate_vlrs()
         self.point_refs = False
         self.has_point_records = True
         self.correct_rec_len()
 
-        self.extra_dimensions = []
         self.vlrs = []
         self.evlrs = []
+        self.extra_dimensions = []
 
         if self.header.version in ("1.3", "1.4"):
             self.populate_evlrs()
-        else:
-            self.evlrs = []
 
-        # If extra-bytes descriptions exist in VLRs, use them.
-        eb_vlrs = [x for x in self.vlrs if x.type == 1]
-        eb_vlrs.extend([x for x in self.evlrs if x.type == 1])
+        eb_vlrs = [x for x in self.vlrs if x.type == EVLRType.ExtraByte]
+        eb_vlrs.extend([x for x in self.evlrs if x.type == EVLRType.ExtraByte])
         if len(eb_vlrs) > 1:
             raise laspy.util.LaspyException("Only one ExtraBytes VLR currently allowed.")
 
@@ -602,6 +601,7 @@ class Writer(Reader):
                 self.point_format.fmt, extradims=self.extra_dimensions)
             self.point_format = new_pt_fmt
         self.pmap = self.data_provider.point_map(self.point_format, self.header)
+
     def correct_rec_len(self):
         extrabytes = self.header.data_record_length - util.Format(self.header.data_format_id).rec_len
         if extrabytes >= 0:
@@ -1160,5 +1160,3 @@ class Writer(Reader):
         else:
             raise laspy.util.LaspyException(
                 "Extra bytes not present in point format. Try creating a new file with an extended point record length.")
-
-
