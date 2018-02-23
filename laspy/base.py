@@ -146,22 +146,6 @@ class DataProvider:
             self.fileref = open(self.filename, 'r+b')
         self.map()
 
-    def get_point_map(self, informat, header):
-        """Get point map is used to build and return a numpy frombuffer view of the mmapped data,
-        using a valid laspy.util.Format instance for the desired point format. This method is used
-        to provide access to extra_bytes even when dimensions have been explicitly defined via an
-        extra_bytes VLR record."""
-        if self._mmap is None:
-            self.map()
-        pointfmt = np.dtype([("point", [(str(x.name), x.np_fmt) for x in informat.specs])])
-        _pmap = np.frombuffer(
-            self._mmap,
-            pointfmt,
-            offset=header.data_offset,
-            count=header.point_records_count
-        )
-        return _pmap
-
     def point_map(self, point_format, header):
         """Create the numpy point map based on the point format."""
         if self._mmap is None:
@@ -170,22 +154,16 @@ class DataProvider:
         if self.mode == "r-":
             # Do not construct the point map in case
             return
-        pmap = self.get_point_map(point_format, header)
-        if header.version not in ("1.3", "1.4"):
-            if header.point_records_count != len(pmap):
-                if self.mode == "r":
-                    raise laspy.util.LaspyException("""Invalid Point Records Count Information Encountered in Header.
-                                        Please correct. Header.point_records_count = %i, and %i records actually detected.""" % (
-                        header.point_records_count, len(pmap)))
-                else:
-                    print("""WARNING: laspy found invalid data in header.point_records_count.
-                            Header.point_records_count = %i, and %i records actually detected.
-                            Attempting to correct mismatch.""") % (
-                        header.point_records_count, len(pmap))
-                    header.point_records_count = len(pmap)
-        return pmap
+        pointfmt = np.dtype([("point", [(str(x.name), x.np_fmt) for x in point_format.specs])])
+        _pmap = np.frombuffer(
+            self._mmap,
+            pointfmt,
+            offset=header.data_offset,
+            count=header.point_records_count
+        )
+        return _pmap
 
-    def close(self, flush=True):
+    def close(self):
         if self.mode == 'w':
             with open(self.filename, mode='wb') as out_file:
                 out_file.write(bytes(self._mmap.view))
@@ -239,10 +217,8 @@ class FileManager(object):
         self.evlrs = None
 
     def setup_read_write(self):
-        open_mode = "r+b"
         self._header_current = True
         self.data_provider.open()
-        self.data_provider.map()
         self.header_format = laspy.util.Format("h" + self.grab_file_version())
         self.header = laspy.header.HeaderManager(header=laspy.header.Header(self.grab_file_version()), reader=self)
         self.populate_vlrs()
@@ -395,7 +371,7 @@ class FileManager(object):
         self.data_provider._mmap.seek(0)
         return str(v1) + "." + str(v2)
 
-    def get_header(self, file_version=1.2):
+    def get_header(self):
         """Return the header object, or create one if absent."""
         return self.header
 
