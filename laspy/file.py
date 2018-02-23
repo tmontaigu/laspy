@@ -63,7 +63,7 @@ class File(object):
         if mode == 'w':
             self.open_create(header, vlrs, evlrs)
         else:
-            self.open()
+            self.file_manager = base.FileRW(self.filename, mode=self._mode)
 
         self._header = self.file_manager.get_header()
         self.add_extra_dimensions(self.file_manager.extra_dimensions)
@@ -78,21 +78,13 @@ class File(object):
             evlrs.extend(header.evlrs)
             header = header.copy()
 
-        self.file_manager = base.Writer(
+        self.file_manager = base.FileCreator(
             self.filename,
             mode="w",
             header=header,
             vlrs=vlrs,
             evlrs=evlrs
         )
-
-    def open(self):
-        """Open the file for processing, called by __init__
-        """
-        if 'w' in self._mode:
-            self.file_manager = base.Writer(self.filename, mode=self._mode)
-        else:
-            self.file_manager = base.Reader(self.filename, mode=self._mode)
 
     def add_extra_dimensions(self, extra_dims):
         if extra_dims:
