@@ -7,6 +7,7 @@ import struct
 from types import GeneratorType
 import numpy as np
 import copy
+from laspy import util
 
 # Not used right now - but could be a handy place to centralize file modes
 FILE_MODES = ["r-", "r", "rw", "w"]
@@ -44,13 +45,16 @@ def read_compressed(stream):
     )
     data, stderr = prc.communicate(stream.read())
     if prc.returncode != 0:
-        # What about using the logging module instead of prints?
         print("Unusual return code from %s: %d" % (laszip_binary, prc.returncode))
         if stderr and len(stderr) < 2048:
             print(stderr)
         raise ValueError("Unable to read compressed file!")
     return data
 
+FORMAT_TYPES = {
+    'vlr': util.Format("VLR"),
+    'evlr': util.Format("EVLR"),
+}
 
 class FakeMmap(object):
     """
@@ -66,7 +70,6 @@ class FakeMmap(object):
             data = stream.read()
         self.view = bytearray(data)
         self.pos = 0
-        # self.stream = io.Buffered(self.view)
         self.__buffer__ = self.view
 
     def __len__(self):
@@ -151,9 +154,6 @@ class DataProvider:
         if self._mmap is None:
             self.map()
 
-        if self.mode == "r-":
-            # Do not construct the point map in case
-            return
         pointfmt = np.dtype([("point", [(str(x.name), x.np_fmt) for x in point_format.specs])])
         _pmap = np.frombuffer(
             self._mmap,
@@ -176,17 +176,14 @@ class DataProvider:
         """Memory map the file"""
         if self._mmap is not None:
             return
-        if self.mode != "w":
-            is_compressed = seek_is_compressed(self.fileref)
-            self._mmap = FakeMmap(self.fileref, is_compressed)
-        else:
-            self._mmap = FakeMmap(self.fileref, False)
+        is_compressed = seek_is_compressed(self.fileref) if self.mode != "w" else False
+        self._mmap = FakeMmap(self.fileref, is_compressed)
 
 
 class FileManager(object):
     """Superclass of Reader and Writer, provides most of the data manipulation functionality in laspy."""
 
-    def __init__(self, filename, mode, header=None, vlrs=None, evlrs=None):
+    def __init__(self, filename, mode):
         """Build the FileManager object. This is done when opening the file
         as well as upon completion of file modification actions like changing the
         header padding."""
@@ -202,11 +199,6 @@ class FileManager(object):
         self._current = 0
         self.pmap = None
 
-        if mode == "w":
-            self.setup_write(header, vlrs, evlrs)
-        else:
-            self.setup_read_write()
-
     def close(self):
         """Help the garbage collector by deleting some of the circular references"""
         self.data_provider.close()
@@ -216,58 +208,6 @@ class FileManager(object):
         self.vlrs = None
         self.evlrs = None
 
-    def setup_read_write(self):
-        self._header_current = True
-        self.data_provider.open()
-        self.header_format = laspy.util.Format("h" + self.grab_file_version())
-        self.header = laspy.header.HeaderManager(header=laspy.header.Header(self.grab_file_version()), reader=self)
-        self.populate_vlrs()
-        self.point_refs = False
-        self.has_point_records = True
-        self._current = 0
-        self.correct_rec_len()
-
-        if self.mode == "r-":
-            self.extra_dimensions = []
-            self.vlrs = []
-            self.evlrs = []
-            return
-        if self.header.version in ("1.3", "1.4"):
-            self.populate_evlrs()
-        else:
-            self.evlrs = []
-
-        # If extra-bytes descriptions exist in VLRs, use them.
-        eb_vlrs = [x for x in self.vlrs if x.type == 1]
-        eb_vlrs.extend([x for x in self.evlrs if x.type == 1])
-        if len(eb_vlrs) > 1:
-            raise laspy.util.LaspyException("Only one ExtraBytes VLR currently allowed.")
-
-        self.extra_dimensions = []
-        if len(eb_vlrs) == 1:
-            self.naive_point_format = self.point_format
-            self.extra_dimensions = eb_vlrs[0].extra_dimensions
-            new_pt_fmt = laspy.util.Format(
-                self.point_format.fmt, extradims=self.extra_dimensions)
-            self.point_format = new_pt_fmt
-        self.pmap = self.data_provider.point_map(self.point_format, self.header)
-
-    def setup_write(self, header, vlrs, evlrs):
-        self._header_current = False
-        if not header:
-            raise laspy.util.LaspyException("Write mode requires a valid header object.")
-        # No file to store data yet.
-        self.has_point_records = False
-        self.data_provider.open()
-        self.header_format = header.format
-        self._header = header
-        self.header = laspy.header.HeaderManager(header=header, reader=self)
-        self.initialize_file_padding(vlrs)
-
-        # We have a file to store data now.
-        self.header.flush()
-
-        self.correct_rec_len()
 
     def verify_num_vlrs(self):
         headervlrs = self.get_header_property("num_variable_len_recs")
@@ -287,13 +227,6 @@ class FileManager(object):
                                      references to their EVLRs, that might be your problem.
                                      You can pass them explicitly to the File constructor.)''')
 
-    def correct_rec_len(self):
-        extrabytes = self.header.data_record_length - laspy.util.Format(self.header.data_format_id).rec_len
-        if extrabytes >= 0:
-            self.point_format = laspy.util.Format(self.header.data_format_id, extra_bytes=extrabytes)
-        else:
-            self.point_format = laspy.util.Format(self.header.data_format_id)
-            self.set_header_property("data_record_length", self.point_format.rec_len)
 
     def initialize_file_padding(self, vlrs):
         filesize = self._header.format.rec_len
@@ -428,8 +361,6 @@ class FileManager(object):
 
     def get_points(self):
         """Return a numpy array of all point data in a file."""
-        if not self.has_point_records:
-            return None
         return self.pmap
 
     def get_raw_point(self, index):
@@ -445,8 +376,8 @@ class FileManager(object):
     def get_next_point(self):
         """Return next point object via get_point / #legacy_api"""
         if self._current is None:
-            raise laspy.util.LaspyException("No Current Point Specified," +
-                                            " use Reader.GetPoint(0) first")
+            raise laspy.util.LaspyException(
+                "No Current Point Specified, use Reader.GetPoint(0) first")
         if self._current == self.get_pointrecordscount():
             return
         return self.get_point(self._current + 1)
@@ -669,34 +600,13 @@ class Reader(FileManager):
 
 
 class Writer(Reader):
-    def setup_write(self, header, vlrs, evlrs):
-        super().setup_write(header, vlrs, evlrs)
-        self.vlrs = []
-        self.evlrs = []
-        if vlrs is not None:
-            self.set_vlrs(vlrs)
-        if evlrs is not None:
-            self.set_evlrs(evlrs)
-
-        self.verify_num_vlrs()
-        if self._header.created_year == 0:
-            self.header.date = datetime.datetime.now()
-        self.populate_vlrs()
-        self.populate_evlrs()
-
-        # If extra-bytes descriptions exist in VLRs, use them.
-        eb_vlrs = [x for x in self.vlrs if x.type == 1]
-        eb_vlrs.extend(x for x in self.evlrs if x.type == 1)
-        if len(eb_vlrs) > 1:
-            raise laspy.util.LaspyException("Only one ExtraBytes VLR currently allowed.")
-
-        self.extra_dimensions = []
-        if len(eb_vlrs) == 1:
-            self.naive_point_format = self.point_format
-            self.extra_dimensions = eb_vlrs[0].extra_dimensions
-            new_pt_fmt = laspy.util.Format(
-                self.point_format.fmt, extradims=self.extra_dimensions)
-            self.point_format = new_pt_fmt
+    def correct_rec_len(self):
+        extrabytes = self.header.data_record_length - util.Format(self.header.data_format_id).rec_len
+        if extrabytes >= 0:
+            self.point_format = util.Format(self.header.data_format_id, extra_bytes=extrabytes)
+        else:
+            self.point_format = laspy.util.Format(self.header.data_format_id)
+            self.set_header_property("data_record_length", self.point_format.rec_len)
 
     def close(self, ignore_header_changes=False, minmax_mode="scaled"):
         """Flush changes to mmap and close mmap and fileref"""
@@ -756,93 +666,39 @@ class Writer(Reader):
         self.set_vlrs(self.vlrs)
 
     def set_vlrs(self, value):
-        if value is None or len(value) == 0:
-            return
-        if not all(x.isVLR for x in value):
-            raise laspy.util.LaspyException(
-                "set_vlrs requers an iterable object composed of :obj:`laspy.header.VLR` objects.")
-        elif self.mode == "rw":
-            current_size = self.data_provider._mmap.size()
-            current_padding = self.get_padding()
-            old_offset = self.header.data_offset
-            new_offset = current_padding + self.header.header_size + sum([len(x) for x in value])
-            self.set_header_property("data_offset", new_offset)
-            self.set_header_property("num_variable_len_recs", len(value))
-            self.data_provider._mmap.seek(0)
-            dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
-            self.data_provider._mmap.seek(old_offset, 0)
-            dat_part_2 = self.data_provider._mmap.read(current_size - old_offset)
-            self.data_provider._mmap.write(dat_part_1)
-            for vlr in value:
-                byte_string = vlr.to_byte_string()
-                self.data_provider._mmap.write(byte_string)
-            self.data_provider._mmap.write(b"\x00" * current_padding)
-            self.data_provider._mmap.write(dat_part_2)
-            self.pmap = self.data_provider.point_map(self.point_format, self.header)
-            self.populate_vlrs()
-        elif self.mode == "w" and not self.has_point_records:
-
-            self.set_header_property("num_variable_len_recs", len(value))
-            if self.data_provider._mmap.size() < self.header.header_size + sum([len(x) for x in value]):
-                self.data_provider._mmap.seek(0)
-                dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
-                self.data_provider._mmap.write(dat_part_1)
-                for vlr in value:
-                    byte_string = vlr.to_byte_string()
-                    self.data_provider._mmap.write(byte_string)
-                new_offset = self.header.header_size + sum(len(x) for x in value)
-                self.set_header_property("data_offset", new_offset)
-
-            self.data_provider._mmap.seek(self.header.header_size)
-            for vlr in value:
-                self.data_provider._mmap.write(vlr.to_byte_string())
-            self.populate_vlrs()
-        else:
-            current_size = self.data_provider._mmap.size()
-            current_padding = self.get_padding()
-            old_offset = self.header.data_offset
-            new_offset = current_padding + self.header.header_size + sum([len(x) for x in value])
-            self.set_header_property("data_offset", new_offset)
-            self.set_header_property("num_variable_len_recs", len(value))
-            self.data_provider._mmap.seek(0)
-            dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
-            self.data_provider._mmap.seek(old_offset)
-            dat_part_2 = self.data_provider._mmap.read(current_size - old_offset)
-            self.data_provider._mmap.write(dat_part_1)
-            for vlr in value:
-                byte_string = vlr.to_byte_string()
-                self.data_provider._mmap.write(byte_string)
-            self.data_provider._mmap.write(b"\x00" * current_padding)
-            self.data_provider._mmap.write(dat_part_2)
-            self.pmap = self.data_provider.point_map(self.point_format, self.header)
-            self.populate_vlrs()
+        current_size = self.data_provider._mmap.size()
+        current_padding = self.get_padding()
+        old_offset = self.header.data_offset
+        new_offset = current_padding + self.header.header_size + sum([len(x) for x in value])
+        self.set_header_property("data_offset", new_offset)
+        self.set_header_property("num_variable_len_recs", len(value))
+        self.data_provider._mmap.seek(0)
+        dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
+        self.data_provider._mmap.seek(old_offset, 0)
+        dat_part_2 = self.data_provider._mmap.read(current_size - old_offset)
+        self.data_provider._mmap.write(dat_part_1)
+        for vlr in value:
+            byte_string = vlr.to_byte_string()
+            self.data_provider._mmap.write(byte_string)
+        self.data_provider._mmap.write(b"\x00" * current_padding)
+        self.data_provider._mmap.write(dat_part_2)
+        self.pmap = self.data_provider.point_map(self.point_format, self.header)
+        self.populate_vlrs()
 
     def set_padding(self, value):
         """Set the padding between end of VLRs and beginning of point data"""
         if value < 0:
             raise laspy.util.LaspyException("New Padding Value Overwrites VLRs")
-        if self.mode == "w":
-            if not self.has_point_records:
-                self.data_provider._mmap.seek(self.vlr_stop)
-                self.data_provider._mmap.write(b"\x00" * value)
-                self.data_provider._mmap.seek(0)
-                return
-            else:
-                raise laspy.util.LaspyException(
-                    "Laspy does not yet support assignment of EVLRs for files which already contain point records.")
-        elif self.mode == "rw":
-            old_offset = self.header.data_offset
-            self.set_header_property("data_offset", self.vlr_stop + value)
-            self.data_provider._mmap.seek(0)
-            dat_part_1 = self.data_provider._mmap.read(self.vlr_stop)
-            self.data_provider._mmap.seek(old_offset)
-            dat_part_2 = self.data_provider._mmap.read(len(self.data_provider._mmap) - old_offset)
-            self.data_provider._mmap.write(dat_part_1)
-            self.data_provider._mmap.write(b"\x00" * value)
-            self.data_provider._mmap.write(dat_part_2)
-            return len(self.data_provider._mmap)
-        else:
-            raise (laspy.util.LaspyException("Must be in write mode to change padding."))
+        old_offset = self.header.data_offset
+        self.set_header_property("data_offset", self.vlr_stop + value)
+        self.data_provider._mmap.seek(0)
+        dat_part_1 = self.data_provider._mmap.read(self.vlr_stop)
+        self.data_provider._mmap.seek(old_offset)
+        dat_part_2 = self.data_provider._mmap.read(len(self.data_provider._mmap) - old_offset)
+        self.data_provider._mmap.write(dat_part_1)
+        self.data_provider._mmap.write(b"\x00" * value)
+        self.data_provider._mmap.write(dat_part_2)
+        return len(self.data_provider._mmap)
 
     def pad_file_for_point_recs(self, num_recs):
         """Pad the file with null bytes out to a calculated length based on
@@ -1321,3 +1177,116 @@ class Writer(Reader):
         else:
             raise laspy.util.LaspyException(
                 "Extra bytes not present in point format. Try creating a new file with an extended point record length.")
+
+
+class FileRW(Writer):
+    def __init__(self, filename, mode):
+        super().__init__(filename, mode)
+
+        self._header_current = True
+        self.data_provider.open()
+        self.header_format = laspy.util.Format("h" + self.grab_file_version())
+        self.header = laspy.header.HeaderManager(header=laspy.header.Header(self.grab_file_version()), reader=self)
+        self.populate_vlrs()
+        self.point_refs = False
+        self.has_point_records = True
+        self._current = 0
+        self.correct_rec_len()
+
+        self.extra_dimensions = []
+        self.vlrs = []
+        self.evlrs = []
+
+        if self.header.version in ("1.3", "1.4"):
+            self.populate_evlrs()
+        else:
+            self.evlrs = []
+
+        # If extra-bytes descriptions exist in VLRs, use them.
+        eb_vlrs = [x for x in self.vlrs if x.type == 1]
+        eb_vlrs.extend([x for x in self.evlrs if x.type == 1])
+        if len(eb_vlrs) > 1:
+            raise laspy.util.LaspyException("Only one ExtraBytes VLR currently allowed.")
+
+        self.extra_dimensions = []
+        if len(eb_vlrs) == 1:
+            self.naive_point_format = self.point_format
+            self.extra_dimensions = eb_vlrs[0].extra_dimensions
+            new_pt_fmt = laspy.util.Format(
+                self.point_format.fmt, extradims=self.extra_dimensions)
+            self.point_format = new_pt_fmt
+        self.pmap = self.data_provider.point_map(self.point_format, self.header)
+
+
+class FileCreator(Writer):
+    def __init__(self, filename, mode, header=None, vlrs=None, evlrs=None):
+        super().__init__(filename, mode)
+
+        self._header_current = False
+        if not header:
+            raise laspy.util.LaspyException("Write mode requires a valid header object.")
+        # No file to store data yet.
+        self.has_point_records = False
+        self.data_provider.open()
+        self.header_format = header.format
+        self._header = header
+        self.header = laspy.header.HeaderManager(header=header, reader=self)
+        self.initialize_file_padding(vlrs)
+
+        # We have a file to store data now.
+        self.header.flush()
+
+        self.correct_rec_len()
+        self.vlrs = []
+        self.evlrs = []
+        if vlrs is not None:
+            self.set_vlrs(vlrs)
+        if evlrs is not None:
+            self.set_evlrs(evlrs)
+
+        self.verify_num_vlrs()
+        if self._header.created_year == 0:
+            self.header.date = datetime.datetime.now()
+        self.populate_vlrs()
+        self.populate_evlrs()
+
+        # If extra-bytes descriptions exist in VLRs, use them.
+        eb_vlrs = [x for x in self.vlrs if x.type == 1]
+        eb_vlrs.extend(x for x in self.evlrs if x.type == 1)
+        if len(eb_vlrs) > 1:
+            raise laspy.util.LaspyException("Only one ExtraBytes VLR currently allowed.")
+
+        self.extra_dimensions = []
+        if len(eb_vlrs) == 1:
+            self.naive_point_format = self.point_format
+            self.extra_dimensions = eb_vlrs[0].extra_dimensions
+            new_pt_fmt = laspy.util.Format(
+                self.point_format.fmt, extradims=self.extra_dimensions)
+            self.point_format = new_pt_fmt
+
+    def set_vlrs(self, value):
+        self.set_header_property("num_variable_len_recs", len(value))
+        if self.data_provider._mmap.size() < self.header.header_size + sum([len(x) for x in value]):
+            self.data_provider._mmap.seek(0)
+            dat_part_1 = self.data_provider._mmap.read(self.header.header_size)
+            self.data_provider._mmap.write(dat_part_1)
+            for vlr in value:
+                byte_string = vlr.to_byte_string()
+                self.data_provider._mmap.write(byte_string)
+            new_offset = self.header.header_size + sum(len(x) for x in value)
+            self.set_header_property("data_offset", new_offset)
+
+        self.data_provider._mmap.seek(self.header.header_size)
+        for vlr in value:
+            self.data_provider._mmap.write(vlr.to_byte_string())
+        self.populate_vlrs()
+
+    def set_padding(self, value):
+        if not self.has_point_records:
+            self.data_provider._mmap.seek(self.vlr_stop)
+            self.data_provider._mmap.write(b"\x00" * value)
+            self.data_provider._mmap.seek(0)
+            return
+        else:
+            raise laspy.util.LaspyException(
+                "Laspy does not yet support assignment of EVLRs for files which already contain point records.")
